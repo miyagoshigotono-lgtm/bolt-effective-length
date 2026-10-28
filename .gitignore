@@ -1,0 +1,11 @@
+node_modules/
+.work-backups/
+tmp/
+tests/output/
+tests/*-output/
+tests/dom-runtime/
+/内容.txt
+.env
+.env.*
+!.env.example
+*.log

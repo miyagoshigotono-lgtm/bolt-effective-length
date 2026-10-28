@@ -1,0 +1,18 @@
+{
+  "name": "bolt-effective-length",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ボルトの有効長・かかり量の計算と寸法図",
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "scripts": {
+    "check": "node scripts/check.cjs",
+    "test": "node --test tests/calculator.test.cjs tests/allowance-policy.test.cjs tests/nut-engagement.test.cjs tests/diagram-input.test.cjs tests/depth-render.test.cjs tests/diagram-render.test.cjs tests/head-render.test.cjs tests/engagement-render.test.cjs tests/site-assets.test.cjs"
+  },
+  "devDependencies": {
+    "jsdom": "26.1.0",
+    "sharp": "0.35.5"
+  }
+}
