@@ -2,9 +2,13 @@
 
 `index.html`をChromeまたはEdgeで開く。サーバーやインストールは不要。アプリと資料は同じフォルダに置く。
 
+公開アプリ: https://miyagoshigotono-lgtm.github.io/bolt-effective-length/
+
 ## GitHubと開発時の検証
 
-GitHubの非公開リポジトリ`miyagoshigotono-lgtm/bolt-effective-length`で管理する。ブラウザ公開用のURLは設定していない。取得したフォルダの`index.html`で従来どおり起動できる。
+GitHubリポジトリ`miyagoshigotono-lgtm/bolt-effective-length`で管理する。利用者の公開指示により、リポジトリとGitHub Pagesのアプリを一般公開する。取得したフォルダの`index.html`でも従来どおり起動できる。
+
+`main`の自動テストが成功したときだけアプリを公開する。`pnpm build`で`dist/`へ必要なファイルを用意し、バックアップ・テスト・開発設定は配信に含めない。公開サイトでも入力や保存データは使用中のブラウザ内に保存し、サーバーへ送信しない。ローカル版で保存した内容は公開サイトへ自動移行しない。必要な構成はJSON書出し・読込で移せる。
 
 開発時だけNode.js 24と、`package.json`指定のpnpmを使用する。次の手順で計算・DOM操作・SVG描画・添付ファイルを検証する。
 
