@@ -10,6 +10,7 @@ const commands = [
     "js/drawing.js",
     "js/app.js",
     "scripts/build-data.cjs",
+    "scripts/build-site.cjs",
     "scripts/check.cjs",
   ].map((file) => ["--check", file]),
 ];
