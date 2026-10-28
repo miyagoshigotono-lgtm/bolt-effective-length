@@ -1,0 +1,90 @@
+{
+  "version": 6,
+  "specVersion": "2026-10-22-full-nut",
+  "dimensions": { "recess": 28, "box": 58, "nut": 10, "boltDiameter": 12 },
+  "selectionRules": { "minimumProjection": 10, "maximumProtrusion": 10 },
+  "catalogs": {
+    "single": {
+      "id": "single",
+      "label": "片引きボルト",
+      "product": "六角ボルトM12",
+      "diameter": "M12",
+      "version": "2026-10-08",
+      "source": "提供カタログ画像・掲載項目239・ページ228",
+      "lengths": [
+        110, 125, 140, 150, 165, 180, 195, 210, 225, 240, 255, 270, 285, 300,
+        315, 330, 345, 360, 375, 390, 405, 420, 435, 450, 480, 510, 540, 570,
+        600
+      ]
+    },
+    "double": {
+      "id": "double",
+      "label": "両引きボルト",
+      "product": "両ネジボルトM12",
+      "diameter": "M12",
+      "version": "2026-10-08",
+      "source": "提供カタログ画像・掲載項目240・ページ228",
+      "lengths": [
+        210, 240, 270, 300, 315, 330, 345, 360, 375, 390, 405, 420, 450, 480,
+        510, 540, 570, 600
+      ]
+    }
+  },
+  "parts": [
+    {
+      "id": "flat",
+      "name": "平座金",
+      "kind": "washer",
+      "standard": "提供図の例",
+      "axial": "4.5",
+      "outer": "",
+      "source": "通常の有効長初期値.pdf・4.5の寸法注記",
+      "shape": "flat"
+    },
+    {
+      "id": "spring",
+      "name": "スプリング付座金",
+      "kind": "washer",
+      "standard": "提供図の例",
+      "axial": "10.5",
+      "outer": "39",
+      "source": "座金資料・底板4.5 + スプリング6 = 10.5 / 外形39",
+      "shape": "spring"
+    },
+    {
+      "id": "square",
+      "name": "角座金",
+      "kind": "washer",
+      "standard": "提供図の例",
+      "axial": "4.5",
+      "outer": "39",
+      "source": "有効長を見るための座金やナットなど.pdf・4.5の寸法注記",
+      "shape": "square"
+    },
+    {
+      "id": "tight",
+      "name": "タイトニック座金",
+      "kind": "washer",
+      "standard": "提供図の例",
+      "axial": "20.5",
+      "outer": "46.5",
+      "source": "座金資料・底板4.5 + 本体16 = 20.5 / 外形46.5",
+      "shape": "tight"
+    },
+    {
+      "id": "custom",
+      "name": "その他の座金",
+      "kind": "washer",
+      "standard": "手入力",
+      "axial": "",
+      "outer": "",
+      "source": "採用する座金の実寸を入力",
+      "shape": "flat"
+    }
+  ],
+  "definitions": {
+    "effectiveStart": "左の穴の内側（座金が木に当たる面）",
+    "effectiveEnd": "右の穴の内側（座金が木に当たる面）",
+    "bolt": "片引き：頭の座面〜先端 / 両引き：先端〜先端"
+  }
+}
