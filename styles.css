@@ -1150,10 +1150,25 @@ dialog::backdrop {
     align-items: start;
   }
   #diagram-editor {
+    position: fixed;
+    z-index: 40;
+    width: 280px;
     min-width: 0;
-    padding: 14px 0 0;
-    border-top: 1px solid var(--line);
+    padding: 14px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    border: 1px solid #8bbeb8;
+    border-radius: 6px;
+    box-shadow: 0 6px 24px #24353224;
     background: white;
+  }
+  .diagram-workbench.editing #drawing .editing-target > rect {
+    stroke: var(--green);
+    stroke-width: 2;
+    stroke-dasharray: none;
+  }
+  .diagram-workbench.editing #drawing .editing-target .edit-hit {
+    fill: #edf8f5;
   }
   #diagram-editor .section-heading {
     margin-bottom: 10px;
@@ -1184,22 +1199,6 @@ dialog::backdrop {
     background: var(--green);
     color: white;
     border-color: var(--green);
-  }
-}
-@media screen and (min-width: 1000px) {
-  .diagram-workbench.editing {
-    grid-template-columns: minmax(0, 1fr) 264px;
-  }
-  #diagram-editor {
-    border-top: 0;
-    border-left: 1px solid var(--line);
-    padding: 0 0 0 16px;
-  }
-}
-@media screen and (max-width: 999px) {
-  .diagram-workbench.editing #drawing-viewport {
-    min-height: 160px;
-    max-height: 42dvh;
   }
 }
 @media print {

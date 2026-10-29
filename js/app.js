@@ -26,7 +26,8 @@
   let pendingWorkspaceRecovery = null;
   let printScroll = null;
   let lastDiagram = null,
-    editorKey = "";
+    editorKey = "",
+    editorTargetIndex = 0;
   const icon = (name) => `<i data-lucide="${name}" aria-hidden="true"></i>`;
   const clone = (object) => JSON.parse(JSON.stringify(object));
   function icons() {
@@ -184,6 +185,7 @@
     $("drawing").style.height =
       Math.max(1, (box.height * readableFit * zoom) / 100) + "px";
     $("zoom-label").textContent = zoom + "%";
+    positionEditor();
   }
   function setValue(id, value) {
     if ($(id).value !== String(value)) $(id).value = value;
@@ -452,7 +454,79 @@
     setValue("diagram-outer", p.outer);
     $("diagram-outer").readOnly = part.id !== "custom" && !!part.outer;
   }
-  function openEditor(key) {
+  function editorAnchor() {
+    const targets = document.querySelectorAll(
+      `#drawing [data-edit="${editorKey}"]`,
+    );
+    return targets[editorTargetIndex] || targets[0];
+  }
+  function positionEditor() {
+    const editor = $("diagram-editor");
+    if (!editorKey || editor.hidden) return;
+    const anchor = editorAnchor();
+    if (!anchor) {
+      closeEditor(false);
+      return;
+    }
+    document.querySelectorAll("#drawing [data-edit]").forEach((target) => {
+      const active = target === anchor;
+      target.classList.toggle("editing-target", active);
+      target.setAttribute("aria-expanded", String(active));
+      target.setAttribute("aria-controls", "diagram-editor");
+    });
+
+    // 再描画された同じ編集対象を追い、表示中の画面内に変更欄を収める。
+    const viewport = window.visualViewport,
+      margin = 12,
+      gap = 8,
+      viewLeft = (viewport?.offsetLeft || 0) + margin,
+      viewTop = (viewport?.offsetTop || 0) + margin,
+      viewWidth = Math.max(
+        1,
+        (viewport?.width || window.innerWidth) - 2 * margin,
+      ),
+      viewHeight = Math.max(
+        1,
+        (viewport?.height || window.innerHeight) - 2 * margin,
+      ),
+      viewRight = viewLeft + viewWidth,
+      viewBottom = viewTop + viewHeight;
+    editor.style.maxWidth = viewWidth + "px";
+    editor.style.maxHeight = viewHeight + "px";
+    const box = anchor.getBoundingClientRect(),
+      size = editor.getBoundingClientRect(),
+      width = Math.min(size.width || 280, viewWidth),
+      height = Math.min(size.height || 180, viewHeight),
+      clamp = (n, min, max) => Math.max(min, Math.min(n, Math.max(min, max)));
+    let left = clamp(
+        (box.left + box.right - width) / 2,
+        viewLeft,
+        viewRight - width,
+      ),
+      top = box.bottom + gap,
+      placement = "below";
+    if (top + height > viewBottom) {
+      if (box.top - gap - height >= viewTop) {
+        top = box.top - gap - height;
+        placement = "above";
+      } else if (box.right + gap + width <= viewRight) {
+        left = box.right + gap;
+        top = box.top;
+        placement = "right";
+      } else if (box.left - gap - width >= viewLeft) {
+        left = box.left - gap - width;
+        top = box.top;
+        placement = "left";
+      } else if (box.top - viewTop > viewBottom - box.bottom) {
+        top = box.top - gap - height;
+        placement = "above";
+      }
+    }
+    editor.style.left = left + "px";
+    editor.style.top = clamp(top, viewTop, viewBottom - height) + "px";
+    editor.dataset.placement = placement;
+  }
+  function openEditor(key, target = null) {
     const titles = {
       column: "柱の幅",
       clearance:
@@ -474,6 +548,12 @@
     };
     if (!titles[key]) return;
     editorKey = key;
+    editorTargetIndex = Math.max(
+      0,
+      [...document.querySelectorAll(`#drawing [data-edit="${key}"]`)].indexOf(
+        target,
+      ),
+    );
     const washer = key.startsWith("washer-"),
       seat = key.endsWith("Seat");
     $("diagram-title").textContent = titles[key];
@@ -505,22 +585,22 @@
     $("diagram-editor").hidden = false;
     $("diagram-workbench").classList.add("editing");
     applyZoom();
-    $("diagram-editor").scrollIntoView({ block: "nearest" });
     const field = $(washer || seat ? "diagram-option" : "diagram-value");
     field.focus({ preventScroll: true });
     if (!washer && !seat) field.select();
   }
   function closeEditor(restoreFocus = true) {
-    const key = editorKey;
+    const anchor = editorKey && editorAnchor();
     editorKey = "";
     $("diagram-editor").hidden = true;
     $("diagram-workbench").classList.remove("editing");
+    document.querySelectorAll("#drawing .editing-target").forEach((target) => {
+      target.classList.remove("editing-target");
+      target.setAttribute("aria-expanded", "false");
+    });
     applyZoom();
     lastEditGroup = "";
-    if (restoreFocus && key)
-      document
-        .querySelector(`#drawing [data-edit="${key}"]`)
-        ?.focus({ preventScroll: true });
+    if (restoreFocus && anchor) anchor.focus({ preventScroll: true });
   }
   function endValues(quantity, suffix = " mm", separator = " / ") {
     const format = (n) => (n == null ? "未到達" : calc.format(n) + suffix);
@@ -679,6 +759,7 @@
     recordChange();
     renderPrintConditions();
     refreshNumberControls();
+    positionEditor();
   }
   function renderPrintConditions() {
     document.body.classList.toggle(
@@ -970,14 +1051,14 @@
     });
   $("drawing").addEventListener("click", (event) => {
     const target = event.target.closest("[data-edit]");
-    if (target) openEditor(target.dataset.edit);
+    if (target) openEditor(target.dataset.edit, target);
   });
   $("drawing").addEventListener("keydown", (event) => {
     if (!["Enter", " "].includes(event.key)) return;
     const target = event.target.closest("[data-edit]");
     if (target) {
       event.preventDefault();
-      openEditor(target.dataset.edit);
+      openEditor(target.dataset.edit, target);
     }
   });
   $("diagram-value").addEventListener("input", (event) => {
@@ -1027,6 +1108,15 @@
     closeEditor();
   });
   $("close-diagram").addEventListener("click", () => closeEditor());
+  document.addEventListener("pointerdown", (event) => {
+    if (
+      editorKey &&
+      !event.target.closest(
+        "#diagram-editor, #drawing [data-edit], .drawing-actions, #dimension-details",
+      )
+    )
+      closeEditor(false);
+  });
   document.addEventListener("keydown", (event) => {
     if (
       event.key === "Escape" &&
@@ -1226,6 +1316,11 @@
     clearTimeout(noticeTimer);
   });
   window.addEventListener("resize", applyZoom);
+  window.addEventListener("scroll", positionEditor, true);
+  window.visualViewport?.addEventListener("resize", positionEditor);
+  window.visualViewport?.addEventListener("scroll", positionEditor);
+  if (window.ResizeObserver)
+    new window.ResizeObserver(positionEditor).observe($("diagram-editor"));
   document.addEventListener(
     "input",
     (event) => {
