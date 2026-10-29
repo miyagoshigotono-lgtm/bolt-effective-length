@@ -53,10 +53,34 @@
       ...options,
       interactive: options.interactive && !options.print,
     };
-    const m = r.input,
-      g = r.geometry,
+    const current = options.sourceModel || r.input,
+      m = options.preview
+        ? { ...r.input, leftSeat: current.leftSeat, rightSeat: current.rightSeat }
+        : r.input,
+      g = { ...r.geometry },
       d = data.dimensions;
-    const current = options.sourceModel || m;
+    let leftPositionPending = false;
+    if (options.preview) {
+      const recessWidth = /^\d+(?:\.\d)?$/.test(String(current.recessWidth))
+        ? Number(current.recessWidth)
+        : 0;
+      g.recessWidth =
+        recessWidth > 0 && recessWidth <= g.width
+          ? recessWidth
+          : g.recessWidth || Math.min(60, g.width);
+      if (g.column != null) {
+        if (m.leftSeat === "box") {
+          const position = /^\d+(?:\.\d)?$/.test(String(current.leftBoxPosition))
+            ? Number(current.leftBoxPosition)
+            : 0;
+          leftPositionPending = position < d.box || position >= g.column;
+          // 未入力の穴は位置未確定の記号として中央に置く。入力や計算には使わない。
+          g.start = leftPositionPending ? (d.box + g.column) / 2 : position;
+        } else g.start = d.recess;
+        g.end =
+          g.column + g.clearance - (m.rightSeat === "recess" ? d.recess : 0);
+      }
+    }
     const vertical = current.direction === "vertical",
       width = vertical ? 750 : 1000;
     const id = options.print
@@ -67,7 +91,7 @@
     const chart = [],
       detail = [];
     const min = Math.min(
-      g.start - (m.leftSeat === "box" ? 58 : 28),
+      g.start - (m.leftSeat === "box" ? 78 : 28),
       g.boltStart - 10,
       g.column == null ? Infinity : 0,
     );
@@ -151,7 +175,7 @@
           `<g class="diagram-target" role="button" tabindex="0" data-edit="${edit}" aria-label="${edit.endsWith("Seat") ? (edit.startsWith("left") ? "左" : "右") + "の穴" : (edit.endsWith("left") ? "左" : "右") + "の座金"}を変更"><title>種類を変更</title>`,
         );
       chart.push(
-        `<rect x="${num(X(x))}" y="${num(axis + y * scale)}" width="${num(w * scale)}" height="${num(h * scale)}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${row ? ' data-row="' + row + '"' : ""}${dash ? ' stroke-dasharray="' + dash + '"' : ""}/>`,
+        `<rect x="${num(X(x))}" y="${num(axis + y * scale)}" width="${num(w * scale)}" height="${num(h * scale)}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${row ? ' data-row="' + row + '"' : ""}${edit.endsWith("Seat") ? ` data-seat="${m[edit]}" data-position-known="${row !== "left-seat" || !leftPositionPending}"` : ""}${dash ? ' stroke-dasharray="' + dash + '"' : ""}/>`,
       );
       if (options.interactive && edit) chart.push("</g>");
     }
@@ -173,11 +197,12 @@
       );
     }
     // 平面の軸断面。木部・穴・金物は同じ縮尺で配置する。
-    const woodStart = m.leftSeat === "box" ? g.start - 58 : g.start - 28;
+    const woodStart = m.leftSeat === "box" ? g.start - 78 : g.start - 28;
     // 箱穴の先は材が続くため、短い省略区間と破断線を置く。材の全長ではない。
     const woodEnd = g.end + (m.rightSeat === "box" ? 78 : 28);
     if (g.column != null) {
-      rect(0, -g.column / 2, g.column, g.column, "url(#" + id + ")", "wood");
+      const leftWidth = m.leftSeat === "recess" ? g.column : g.width;
+      rect(0, -leftWidth / 2, g.column, leftWidth, "url(#" + id + ")", "wood");
       rect(
         g.column,
         -g.width / 2,
@@ -186,12 +211,21 @@
         "url(#" + id + ")",
         "wood",
       );
-      dim(0, g.column, 150, "柱 " + fmt(g.column) + "角", "#476b5e", "column");
+      dim(
+        0,
+        g.column,
+        150,
+        m.leftSeat === "recess"
+          ? "柱 " + fmt(g.column) + "角"
+          : "梁側 " + fmt(g.column),
+        "#476b5e",
+        "column",
+      );
       dim(
         g.column,
         m.rightSeat === "box" ? g.end : woodEnd,
         420,
-        "柱から " + fmt(g.clearance),
+        (m.leftSeat === "recess" ? "柱から " : "基準から ") + fmt(g.clearance),
         "#476b5e",
         "clearance",
       );
@@ -213,6 +247,35 @@
         "url(#" + id + ")",
         "wood",
       );
+    // 座彫り側は柱の側面・梁の平面として、木部の輪郭を上下へ延ばす。
+    for (const side of ["left", "right"]) {
+      if (m[side + "Seat"] !== "recess") continue;
+      const left =
+          side === "left"
+            ? (g.column == null ? woodStart : 0)
+            : Math.max(woodStart, woodEnd - g.width),
+        right =
+          side === "left"
+            ? g.column ?? Math.min(woodEnd, woodStart + g.width)
+            : woodEnd,
+        memberWidth = side === "left" && g.column != null ? g.column : g.width,
+        top = axis - (memberWidth * scale) / 2,
+        bottom = axis + (memberWidth * scale) / 2,
+        extendedTop = axis - (Math.max(memberWidth, g.width) * scale) / 2 - 55,
+        extendedBottom = axis + (Math.max(memberWidth, g.width) * scale) / 2 + 55;
+      chart.push(
+        `<g data-member-continuation="${side}" data-member-view="column-or-beam-side">`,
+      );
+      for (const edge of [left, right]) {
+        line(X(edge), extendedTop, X(edge), top);
+        line(X(edge), bottom, X(edge), extendedBottom);
+      }
+      if (side === "right" || g.column == null) {
+        const interfaceX = X(side === "left" ? right : left);
+        line(interfaceX, top, interfaceX, bottom);
+      }
+      chart.push("</g>");
+    }
     if (m.rightSeat === "box") {
       const x = X(woodEnd),
         top = axis - (g.width * scale) / 2,
@@ -234,6 +297,8 @@
         opening,
         "#ffffff",
         side + "-seat",
+        "#516e62",
+        side === "left" && leftPositionPending ? "4 4" : "",
       );
       dim(
         side === "left" ? face - span : face,
@@ -324,7 +389,10 @@
       g.start,
       g.end,
       105,
-      "有効長 E " + fmt(r.effective),
+      "有効長 E " +
+        (options.geometryPending || leftPositionPending
+          ? "未確定"
+          : fmt(options.preview ? g.end - g.start : r.effective)),
       "#087f76",
       current.mode === "direct" ? "effective" : "",
     );
