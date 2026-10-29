@@ -33,7 +33,9 @@ test("公開用ファイルは原本と一致し、参照切れや保存デー�
       const url = element.getAttribute("src") || element.getAttribute("href");
       if (!url || /^(?:#|[a-z][a-z\d+.-]*:)/i.test(url)) continue;
       assert.ok(
-        fs.statSync(path.join(output, decodeURIComponent(url))).isFile(),
+        fs.statSync(
+          path.join(output, decodeURIComponent(url.split(/[?#]/, 1)[0])),
+        ).isFile(),
         url,
       );
     }
