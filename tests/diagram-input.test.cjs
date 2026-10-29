@@ -181,6 +181,56 @@ test("左右の穴を図から選び、左箱穴の未入力は勝手に補完�
   assert.equal(a.result().effective, 249);
 });
 
+test("左箱穴の位置が未入力でも図形は58角に切り替わり、入力・保存を勝手に補完しない", (t) => {
+  for (const boltType of ["", "single", "double"]) {
+    const a = setup(t);
+    if (boltType) a.type(boltType);
+    a.open("leftSeat");
+    a.change("#diagram-option", "box");
+    const hole = a.get('#drawing [data-row="left-seat"]');
+    assert.equal(hole.dataset.seat, "box");
+    assert.equal(hole.getAttribute("width"), hole.getAttribute("height"));
+    assert.equal(hole.dataset.positionKnown, "false");
+    assert.equal(a.doc.querySelector('[data-member-continuation="left"]'), null);
+    assert.ok(a.get("#drawing").textContent.includes("有効長 E 未確定"));
+    assert.equal(a.model().leftBoxPosition, "");
+    assert.equal(a.get("#diagram-value").value, "");
+    assert.equal(a.get("#print").disabled, true);
+    assert.equal(a.get("#download-svg").disabled, true);
+    assert.equal(
+      JSON.parse(a.w.localStorage.getItem(workspaceKey)).current.model.leftBoxPosition,
+      "",
+    );
+    a.input("#diagram-value", "70");
+    assert.equal(a.get('#drawing [data-row="left-seat"]').dataset.positionKnown, "true");
+    assert.ok(a.get("#drawing").textContent.includes("有効長 E 235"));
+    assert.equal(a.get("#drawing").textContent.includes("柱 105角"), false);
+    if (boltType) assert.equal(a.result().effective, 235);
+  }
+});
+
+test("座金が未入力の途中でも穴の種類と座彫り側の輪郭を更新する", (t) => {
+  const a = setup(t);
+  a.type("double");
+  a.open("leftSeat");
+  a.change("#diagram-option", "box");
+  a.input("#diagram-value", "70");
+  a.open("washer-right");
+  a.change("#diagram-option", "custom");
+  assert.equal(a.result().ok, false);
+  a.change("#leftSeat", "recess");
+  assert.equal(a.get('#drawing [data-row="left-seat"]').dataset.seat, "recess");
+  assert.ok(a.get('[data-member-continuation="left"]'));
+  assert.ok(a.get("#drawing").textContent.includes("有効長 E 未確定"));
+  assert.equal(a.model().washers.right.axial, "");
+  assert.equal(a.model().leftBoxPosition, "70");
+  a.open("washer-right");
+  a.input("#diagram-axial", "4.5");
+  a.input("#diagram-outer", "39");
+  assert.equal(a.result().effective, 277);
+  assert.ok(a.get("#drawing").textContent.includes("有効長 E 277"));
+});
+
 test("座金を図から選択し厚さを自動設定、その他の座金だけ実寸入力", (t) => {
   const a = setup(t);
   a.type();

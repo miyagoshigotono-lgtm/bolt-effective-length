@@ -96,3 +96,79 @@ test("32通りの入力図で編集対象と寸法が一致し、数値のタッ
             }
           }
 });
+
+test("座彫り側だけ柱・梁側面の輪郭を上下に延ばし、片引き・両引き・全出力で一致", () => {
+  for (const direction of ["horizontal", "vertical"])
+    for (const boltType of ["single", "double"])
+      for (const mode of ["joint", "direct"])
+        for (const leftSeat of ["recess", "box"])
+          for (const rightSeat of ["recess", "box"])
+            for (const options of [
+              { compact: true, interactive: true },
+              {},
+              { compact: true, print: true },
+            ]) {
+              const m = Object.assign(calc.createModel(data), {
+                direction, boltType, mode, leftSeat, rightSeat, leftBoxPosition: "70",
+              });
+              const r = calc.calculate(m, data);
+              assert.equal(r.ok, true);
+              const before = JSON.stringify(r);
+              const svg = drawing.render(r, data, options);
+              const dom = new JSDOM(svg, { contentType: "image/svg+xml" });
+              try {
+                const doc = dom.window.document;
+                assert.equal(Number(doc.documentElement.dataset.effective), r.effective);
+                for (const side of ["left", "right"]) {
+                  const seat = m[side + "Seat"];
+                  const hole = doc.querySelector(`[data-row="${side}-seat"]`);
+                  assert.equal(hole.dataset.seat, seat);
+                  const continuation = doc.querySelector(`[data-member-continuation="${side}"]`);
+                  if (seat === "box") {
+                    assert.equal(continuation, null);
+                    assert.equal(hole.getAttribute("width"), hole.getAttribute("height"));
+                    continue;
+                  }
+                  assert.ok(continuation);
+                  assert.ok(continuation.querySelectorAll("line").length >= 4);
+                  const lines = [...continuation.querySelectorAll("line")];
+                  assert.ok(lines.every((line) => line.getAttribute("x1") === line.getAttribute("x2")));
+                  assert.ok(lines.every((line) => !line.hasAttribute("stroke-dasharray")));
+                  assert.ok(lines.some((line) => Number(line.getAttribute("y2")) - Number(line.getAttribute("y1")) >= 55));
+                }
+                assert.equal(JSON.stringify(r), before);
+              } finally {
+                dom.window.close();
+              }
+            }
+});
+
+test("未確定の入力図でも最新の穴形状を使い、未知の位置や有効長を確定値に見せない", () => {
+  for (const direction of ["horizontal", "vertical"])
+    for (const boltType of ["single", "double"]) {
+      const baseline = Object.assign(calc.createModel(data), { direction, boltType });
+      const r = calc.calculate(baseline, data);
+      const current = { ...baseline, leftSeat: "box", leftBoxPosition: "" };
+      const before = JSON.stringify({ r, current });
+      const svg = drawing.render(r, data, {
+        compact: true, interactive: true, preview: true, geometryPending: true,
+        sourceModel: current,
+      });
+      const dom = new JSDOM(svg, { contentType: "image/svg+xml" });
+      try {
+        const doc = dom.window.document;
+        const hole = doc.querySelector('[data-row="left-seat"]');
+        assert.equal(hole.dataset.seat, "box");
+        assert.equal(hole.dataset.positionKnown, "false");
+        assert.equal(hole.getAttribute("width"), hole.getAttribute("height"));
+        assert.ok(hole.hasAttribute("stroke-dasharray"));
+        assert.ok(doc.documentElement.textContent.includes("有効長 E 未確定"));
+        assert.equal(doc.documentElement.dataset.effective, "");
+        assert.equal(doc.querySelector('[data-member-continuation="left"]'), null);
+        assert.equal(JSON.stringify({ r, current }), before);
+        assert.ok(!/NaN|Infinity/.test(svg));
+      } finally {
+        dom.window.close();
+      }
+    }
+});

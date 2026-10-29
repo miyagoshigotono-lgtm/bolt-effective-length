@@ -396,14 +396,17 @@
       : $(field);
   }
   function renderInputDrawing() {
-    if (result.ok) lastDiagram = result;
-    else if (!model.boltType) {
-      const draft = calc.calculate(
-        { ...clone(model), boltType: "double", candidate: "auto" },
-        data,
-      );
-      if (draft.ok) lastDiagram = draft;
-    }
+    const draft = result.ok
+      ? result
+      : calc.calculate(
+          {
+            ...clone(model),
+            boltType: model.boltType || "double",
+            candidate: model.boltType ? model.candidate : "auto",
+          },
+          data,
+        );
+    if (draft.ok) lastDiagram = draft;
     if (!lastDiagram) {
       const initial = calc.createModel(data);
       initial.boltType = "double";
@@ -413,6 +416,7 @@
       compact: true,
       interactive: true,
       preview: !result.ok,
+      geometryPending: !draft.ok,
       sourceModel: model,
     });
     $("drawing").className = result.ok ? "" : "diagram-preview";
@@ -420,7 +424,7 @@
       ? ""
       : !model.boltType
         ? "ボルト未選択"
-        : "直前の寸法図・未計算";
+        : "入力中の参考図・未計算";
     $("dimension-summary").textContent =
       `桁 ${model.beamWidth || "未入力"} × ${model.beamHeight || "未入力"} / ボルト深さ ${model.boltDepth || "未入力"} / 最低かかり量 ${model.boltType === "double" ? "左" + (model.leftProjection || "未入力") + "・" : ""}右${model.rightProjection || "未入力"} mm`;
     $("file-summary").textContent = model.name;
@@ -528,7 +532,7 @@
   }
   function openEditor(key, target = null) {
     const titles = {
-      column: "柱の幅",
+      column: model.leftSeat === "box" ? "梁側の基準幅" : "柱の幅",
       clearance:
         model.rightSeat === "box"
           ? "柱から右の穴まで（内側）"
