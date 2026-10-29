@@ -6,7 +6,7 @@ const { JSDOM, VirtualConsole } = require("jsdom");
 const root = path.resolve(__dirname, "..");
 const workspaceKey = "bolt-effective-length.workspace.v1";
 
-function setup(t, workspace = null, width = 1280) {
+function setup(t, workspace = null, width = 1280, visualViewport = null) {
   const errors = [],
     virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (error) => errors.push(error.message));
@@ -23,6 +23,7 @@ function setup(t, workspace = null, width = 1280) {
     doc = w.document;
   w.innerWidth = width;
   w.innerHeight = 850;
+  if (visualViewport) w.visualViewport = visualViewport(w);
   Object.defineProperty(w.SVGElement.prototype, "viewBox", {
     get() {
       const parts = (this.getAttribute("viewBox") || "0 0 1000 650")
@@ -762,6 +763,164 @@ test("編集欄を開いたまま詳細側を変更しても入力が同期し�
   const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
   assert.ok(!css.includes("#diagram-editor::backdrop"));
   assert.ok(css.includes(".diagram-workbench.editing"));
+});
+
+function rectangle(left, top, width, height) {
+  return { left, top, right: left + width, bottom: top + height, width, height };
+}
+
+function editorGeometry(a, targetRect, editorRect = () => rectangle(0, 0, 280, 190)) {
+  a.w.SVGElement.prototype.getBoundingClientRect = function () {
+    return targetRect(this);
+  };
+  a.get("#diagram-editor").getBoundingClientRect = editorRect;
+}
+
+test("押した数値のすぐ下に変更欄を置き、画面右下では上へ移して画面内に収める", (t) => {
+  const a = setup(t, null, 1440);
+  let box = rectangle(400, 300, 100, 40);
+  editorGeometry(a, () => box);
+  let scrollCount = 0;
+  a.get("#diagram-editor").scrollIntoView = () => scrollCount++;
+  a.open("column");
+  const editor = a.get("#diagram-editor");
+  assert.equal(editor.style.left, "310px");
+  assert.equal(editor.style.top, "348px");
+  assert.equal(editor.dataset.placement, "below");
+  assert.equal(scrollCount, 0);
+  assert.equal(a.get('#drawing .editing-target').dataset.edit, "column");
+  assert.equal(a.get('#drawing .editing-target').getAttribute("aria-expanded"), "true");
+
+  box = rectangle(1300, 790, 100, 40);
+  a.open("clearance");
+  assert.equal(editor.style.left, "1148px");
+  assert.equal(editor.style.top, "592px");
+  assert.equal(editor.dataset.placement, "above");
+  box = rectangle(0, 20, 100, 40);
+  a.w.dispatchEvent(new a.w.Event("resize"));
+  assert.equal(editor.style.left, "12px");
+  assert.equal(editor.style.top, "68px");
+});
+
+test("同じ穴の図形と説明文字を区別し、実際に押したほうを変更欄の基準にする", (t) => {
+  const a = setup(t, null, 1440);
+  editorGeometry(a, (element) =>
+    rectangle(element.querySelector(".edit-hit") ? 900 : 300, 300, 80, 40),
+  );
+  const targets = () => a.doc.querySelectorAll('#drawing [data-edit="rightSeat"]');
+  assert.equal(targets().length, 2);
+  targets()[1].dispatchEvent(new a.w.MouseEvent("click", { bubbles: true }));
+  assert.equal(a.get("#diagram-editor").style.left, "800px");
+  assert.equal(targets()[1].classList.contains("editing-target"), true);
+  a.change("#diagram-option", "recess");
+  assert.equal(a.get("#diagram-editor").style.left, "800px");
+  assert.equal(targets()[1].classList.contains("editing-target"), true);
+  a.click("#close-diagram");
+  assert.equal(a.doc.activeElement, targets()[1]);
+  assert.equal(a.doc.querySelector("#drawing .editing-target"), null);
+  targets()[0].dispatchEvent(new a.w.MouseEvent("click", { bubbles: true }));
+  assert.equal(a.get("#diagram-editor").style.left, "200px");
+});
+
+test("数値変更による図の再描画と、図内スクロール・ズーム・向き変更に追従する", (t) => {
+  const a = setup(t, null, 1440);
+  let scroll = 0;
+  editorGeometry(a, () =>
+    rectangle(400 + Number(a.model().clearance) - 200 - scroll, 300, 100, 40),
+  );
+  a.type();
+  a.open("clearance");
+  const first = a.get("#drawing .editing-target");
+  a.input("#diagram-value", "220");
+  assert.notEqual(a.get("#drawing .editing-target"), first);
+  assert.equal(a.get("#diagram-editor").style.left, "330px");
+  assert.equal(a.get("#diagram-value").value, "220");
+  scroll = 80;
+  a.get("#drawing-viewport").dispatchEvent(new a.w.Event("scroll"));
+  assert.equal(a.get("#diagram-editor").style.left, "250px");
+  scroll = 30;
+  a.click("#zoom-in");
+  assert.equal(a.get("#diagram-editor").style.left, "300px");
+  a.change("#direction", "vertical");
+  assert.equal(a.get("#diagram-editor").hidden, false);
+  assert.equal(a.get("#drawing .editing-target").dataset.edit, "clearance");
+});
+
+test("狭い画面・低い画面では変更欄を画面内に保ち、入る場合は図の横へ避ける", (t) => {
+  for (const width of [320, 390, 700, 1440]) {
+    const a = setup(t, null, width);
+    a.w.innerHeight = 240;
+    const editorWidth = Math.min(280, width - 24);
+    editorGeometry(
+      a,
+      () => rectangle(width / 2 - 40, 100, 80, 40),
+      () => rectangle(0, 0, editorWidth, 190),
+    );
+    a.open("column");
+    const editor = a.get("#diagram-editor");
+    assert.ok(parseFloat(editor.style.left) >= 12);
+    assert.ok(parseFloat(editor.style.left) + editorWidth <= width - 12);
+    assert.ok(parseFloat(editor.style.top) >= 12);
+    assert.ok(parseFloat(editor.style.top) + 190 <= 228);
+    assert.equal(editor.style.maxHeight, "216px");
+    if (width >= 700) assert.equal(editor.dataset.placement, "right");
+  }
+});
+
+test("画面キーボードで見える範囲が変わっても、変更欄はその範囲に収まる", (t) => {
+  const a = setup(t, null, 390, (w) => Object.assign(new w.EventTarget(), {
+    width: 390, height: 700, offsetLeft: 0, offsetTop: 0,
+  }));
+  editorGeometry(a, () => rectangle(200, 400, 80, 40));
+  a.open("column");
+  Object.assign(a.w.visualViewport, {
+    width: 320, height: 260, offsetLeft: 20, offsetTop: 80,
+  });
+  a.w.visualViewport.dispatchEvent(new a.w.Event("resize"));
+  const editor = a.get("#diagram-editor");
+  assert.equal(editor.style.maxWidth, "296px");
+  assert.equal(editor.style.maxHeight, "236px");
+  assert.ok(parseFloat(editor.style.left) >= 32);
+  assert.ok(parseFloat(editor.style.left) + 280 <= 328);
+  assert.ok(parseFloat(editor.style.top) >= 92);
+  assert.ok(parseFloat(editor.style.top) + 190 <= 328);
+  assert.equal(a.doc.activeElement, a.get("#diagram-value"));
+});
+
+test("欄外を押すと閉じ、変更対象・ズーム・詳細側の操作中は閉じない", (t) => {
+  const a = setup(t);
+  a.open("column");
+  const pointer = (selector) => a.get(selector).dispatchEvent(
+    new a.w.MouseEvent("pointerdown", { bubbles: true }),
+  );
+  for (const selector of ["#diagram-value", "#zoom-in", "#column", '#drawing [data-edit="clearance"]']) {
+    pointer(selector);
+    assert.equal(a.get("#diagram-editor").hidden, false);
+  }
+  a.get("#name").focus();
+  pointer("#name");
+  assert.equal(a.get("#diagram-editor").hidden, true);
+  assert.equal(a.doc.activeElement, a.get("#name"));
+});
+
+test("座金寸法の欄が増えても位置を更新し、変更欄のために図の幅や高さを変えない", (t) => {
+  const a = setup(t, null, 1440);
+  editorGeometry(
+    a,
+    () => rectangle(400, 550, 80, 40),
+    () => rectangle(0, 0, 280, a.get("#diagram-custom-fields").hidden ? 190 : 310),
+  );
+  a.type();
+  const drawingWidth = a.get("#drawing").style.width;
+  a.open("washer-right");
+  assert.equal(a.get("#diagram-editor").dataset.placement, "below");
+  a.change("#diagram-option", "custom");
+  assert.equal(a.get("#diagram-editor").dataset.placement, "above");
+  assert.equal(a.get("#diagram-editor").style.top, "232px");
+  assert.equal(a.get("#drawing").style.width, drawingWidth);
+  const css = fs.readFileSync(path.join(root, "styles.css"), "utf8");
+  assert.ok(!css.includes("minmax(0, 1fr) 264px"));
+  assert.ok(!css.includes("max-height: 42dvh"));
 });
 
 test("形式5の自動保存を原文退避し、3 mm指定だけ10 mmへ引き上げて手動候補を保持", (t) => {
