@@ -23,22 +23,22 @@ function suite(t, { hash = "", stored = null, blocked = false } = {}) {
 
 test("統合画面は選択した計算だけを開き、切替では画面や入力を読み直さない", (t) => {
   const a = suite(t);
-  const bolt = a.frame("bolt");
-  const src = bolt.src;
-  assert.ok(src.includes("bolt.html"));
-  assert.equal(a.frame("keraba").hasAttribute("src"), false);
-  a.tab("keraba").click();
-  assert.equal(a.panel("bolt").hasAttribute("inert"), true);
-  assert.equal(a.tab("keraba").getAttribute("aria-selected"), "true");
-  assert.equal(a.panel("keraba").getAttribute("aria-hidden"), "false");
   const keraba = a.frame("keraba");
+  const src = keraba.src;
+  assert.ok(src.includes("apps/keraba/index.html"));
+  assert.equal(a.frame("bolt").hasAttribute("src"), false);
+  a.tab("bolt").click();
+  assert.equal(a.panel("keraba").hasAttribute("inert"), true);
+  assert.equal(a.tab("bolt").getAttribute("aria-selected"), "true");
+  assert.equal(a.panel("bolt").getAttribute("aria-hidden"), "false");
+  const bolt = a.frame("bolt");
   a.tab("kebiki").click();
   assert.ok(a.frame("kebiki").src.includes("apps/kebiki/index.html"));
   a.tab("bolt").click();
   a.tab("keraba").click();
   assert.equal(a.frame("bolt"), bolt);
-  assert.equal(bolt.src, src);
   assert.equal(a.frame("keraba"), keraba);
+  assert.equal(keraba.src, src);
   assert.equal(a.w.location.hash, "#keraba");
   assert.equal(a.w.localStorage.getItem("wood-calculators.active.v1"), "keraba");
 });
@@ -47,19 +47,19 @@ test("画面指定・前回の画面・キーボード・戻る操作が同じ�
   const a = suite(t, { hash: "#kebiki", stored: "keraba" });
   assert.equal(a.tab("kebiki").getAttribute("aria-selected"), "true");
   a.tab("kebiki").dispatchEvent(new a.w.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
-  assert.equal(a.w.document.activeElement, a.tab("bolt"));
-  assert.equal(a.tab("bolt").tabIndex, 0);
+  assert.equal(a.w.document.activeElement, a.tab("keraba"));
+  assert.equal(a.tab("keraba").tabIndex, 0);
   assert.equal(a.tab("kebiki").tabIndex, -1);
-  a.w.location.hash = "keraba";
+  a.w.location.hash = "bolt";
   a.w.dispatchEvent(new a.w.HashChangeEvent("hashchange"));
-  assert.equal(a.tab("keraba").getAttribute("aria-selected"), "true");
+  assert.equal(a.tab("bolt").getAttribute("aria-selected"), "true");
   const b = suite(t, { stored: "kebiki" });
   assert.equal(b.tab("kebiki").getAttribute("aria-selected"), "true");
 });
 
 test("不正な画面指定・保存不能でも外部URLを開かず、旧寸法リンクも使える", (t) => {
   const a = suite(t, { hash: "#https://unknown.test/", stored: "bad", blocked: true });
-  assert.equal(a.tab("bolt").getAttribute("aria-selected"), "true");
+  assert.equal(a.tab("keraba").getAttribute("aria-selected"), "true");
   a.tab("kebiki").click();
   assert.equal(a.tab("kebiki").getAttribute("aria-selected"), "true");
   const b = suite(t, { hash: "#dimension-details", stored: "keraba" });
