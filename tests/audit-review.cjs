@@ -28,7 +28,7 @@ async function run() {
       offline: true,
     });
     const page = await context.newPage();
-    await page.goto(pathToFileURL(path.join(root, "index.html")).href);
+    await page.goto(pathToFileURL(path.join(root, "bolt.html")).href);
     await page
       .locator("#selection-status")
       .filter({ hasText: "種別を選択" })

@@ -153,7 +153,7 @@ test("確認欄・ボタン・ブラウザ印刷前判定は同じ警告方針�
       'document.body.classList.toggle("print-blocked", !canPrint())',
     ),
   );
-  const html = fs.readFileSync(path.join(__dirname, "../index.html"), "utf8");
+  const html = fs.readFileSync(path.join(__dirname, "../bolt.html"), "utf8");
   assert.ok(!html.includes("不足・締め代超過・該当なし"));
   assert.match(html, /ナットからの飛び出し10\s+mmまで許容/);
 });

@@ -1,0 +1,1599 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ケラバ図メーカー</title>
+<meta name="theme-color" content="#124680">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ケラバ図">
+<style>
+  :root{
+    --bg:#eef1f5; --panel:#ffffff; --line:#d5dce5; --ink:#1c2430; --sub:#5b6878;
+    --accent:#1b6fd4; --accent2:#124680;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;height:100%}
+  body{
+    background:var(--bg); color:var(--ink);
+    font-family:"Yu Gothic UI","Meiryo","Hiragino Kaku Gothic ProN","MS PGothic",sans-serif;
+    font-size:13px;
+  }
+  .app{display:flex;height:100vh;overflow:hidden}
+
+  /* ---------- 左パネル ---------- */
+  .side{
+    width:525px;min-width:525px;background:var(--panel);border-right:1px solid var(--line);
+    display:flex;flex-direction:column;
+  }
+  .side header{padding:15px 18px 13px;border-bottom:1px solid var(--line)}
+  .side header h1{margin:0;font-size:21px;letter-spacing:.04em}
+  .side header p{margin:4px 0 0;font-size:14px;color:var(--sub)}
+  #ver{color:#9aa7b6}
+  #updBar{display:none;padding:10px 18px;background:#fff6d8;border-bottom:1px solid #e8d48a;
+          font-size:16px;color:#6b4e00;cursor:pointer}
+  #updBar b{color:#8a5b00}
+  @media print{ #updBar{display:none!important} }
+  .mode-tabs{display:flex;gap:8px;padding:10px 18px;border-bottom:1px solid var(--line);background:#f8fafc}
+  .mode-tab{flex:1;font-size:17px;font-weight:700;padding:9px 12px;color:var(--sub);background:#fff}
+  .mode-tab.is-active{color:#fff;background:var(--accent);border-color:var(--accent)}
+  .mode-tab.is-active:hover{background:var(--accent2);border-color:var(--accent2)}
+  .scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:13px 18px 39px}
+
+  fieldset{border:1px solid var(--line);border-radius:6px;margin:0 0 18px;padding:13px 16px 16px;
+           min-inline-size:0;min-width:0}
+  legend{font-size:17px;font-weight:700;color:var(--accent2);padding:0 8px;letter-spacing:.06em}
+  .row{display:flex;align-items:center;gap:9px;margin:9px 0;min-width:0}
+  .row label{flex:0 0 203px;font-size:18px;color:var(--ink);font-weight:600}
+  .row.wide label{flex:0 0 100%}
+  input[type=text],input[type=number],select,textarea{
+    flex:1 1 0;min-width:0;width:0;padding:7px 9px;border:1px solid var(--line);border-radius:5px;
+    font-family:inherit;font-size:18px;background:#fbfcfe;color:var(--ink);
+  }
+  input[type=number]{text-align:right}
+  .row.slider{gap:12px;margin:12px 0 6px}
+  .row.slider input[type=range]{flex:1 1 auto;min-width:0;height:28px;accent-color:var(--accent);cursor:pointer}
+  .slend{flex:0 0 auto;font-size:16px;font-weight:600;color:var(--sub)}
+  input:focus,select:focus,textarea:focus{outline:2px solid #bcd8f7;border-color:var(--accent)}
+  input:disabled,select:disabled,button:disabled{
+    background:#eef1f5;color:#a3aebc;border-color:#e2e7ee;cursor:not-allowed}
+  .row.off label{color:#a3aebc}
+  .row.off .unit{color:#a3aebc}
+  .sizepair{display:flex;align-items:center;gap:7px;flex:1 1 0;min-width:0}
+  .sizepair input[type=number]{flex:1 1 0;min-width:0;width:0}
+  .sizepair .times{flex:0 0 auto;font-size:20px;font-weight:700;color:var(--sub)}
+  .material-row > label:first-child{flex:0 0 168px}
+  .row label.fixcheck{display:flex;align-items:center;gap:4px;flex:0 0 auto;font-size:14px;font-weight:700;color:var(--sub);white-space:nowrap}
+  .fixcheck input{width:17px;height:17px;margin:0}
+  .print-warning{display:none;flex:0 0 100%;padding:10px 12px;margin:0 0 4px;
+                 border:2px solid #c72323;border-radius:6px;background:#fff0f0;color:#9d1515;
+                 font-size:16px;font-weight:700;line-height:1.45}
+  .print-warning.is-visible{display:block}
+  .print-warning-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+  .print-warning ul{margin:7px 0 0;padding-left:1.3em}
+  .print-warning li+li{margin-top:4px}
+  .print-warning label{display:flex;align-items:center;gap:7px;cursor:pointer;white-space:nowrap}
+  .print-warning input{width:19px;height:19px;margin:0;accent-color:#a51919}
+  textarea{resize:vertical;min-height:52px;line-height:1.5}
+  .unit{flex:0 0 36px;font-size:16px;color:var(--ink)}
+  .chk{display:flex;align-items:center;gap:8px;font-size:16px;color:var(--ink);padding:5px 0;
+       flex:0 0 calc(50% - 6px);min-width:0;line-height:1.35}
+  .chk input{margin:0;flex:0 0 auto;width:17px;height:17px}
+  .chkgrid{display:flex;flex-wrap:wrap;gap:0 12px}
+  .boxgrp{background:#f6f8fb;border:1px solid #e4eaf2;border-radius:6px;
+          padding:7px 11px 9px;margin:0 0 9px}
+  .boxgrp > b{display:block;font-size:14px;color:var(--sub);font-weight:700;
+              margin:0 0 3px;letter-spacing:.04em}
+  .boxgrp:last-child{margin-bottom:0}
+  .hint{font-size:14px;color:var(--sub);line-height:1.6;margin:6px 0 0}
+  .offset-group{padding:10px 12px;margin:0 0 10px;background:#f6f8fb;border:1px solid #e4eaf2;border-radius:6px}
+  .offset-group:last-child{margin-bottom:0}
+  .offset-group b{display:block;margin:0 0 7px;font-size:16px;color:var(--accent2)}
+  .offset-grid{display:grid;grid-template-columns:1.05fr 1.25fr .7fr .8fr auto;gap:7px;align-items:center}
+  .offset-grid.no-side{grid-template-columns:1.05fr 1.25fr 1fr auto}
+  .offset-grid select,.offset-grid input{width:100%;min-width:0;padding:6px 7px;font-size:16px}
+  .offset-grid .unit{width:auto;flex:none;font-size:15px}
+  .tile-only{display:none}
+  body.tile-mode .tile-only{display:block}
+  body.tile-mode .row.tile-only{display:flex}
+  body.tile-mode .normal-only{display:none}
+  .tile-inline{display:none}
+  body.tile-mode .tile-inline{display:inline-flex}
+
+  button{
+    font-family:inherit;font-size:16px;padding:8px 13px;border-radius:6px;cursor:pointer;
+    border:1px solid var(--line);background:#fff;color:var(--ink);
+  }
+  button:hover{background:#f2f6fb;border-color:#b9c8da}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700}
+  button.primary:hover{background:var(--accent2)}
+  button.primary:disabled,button.primary:disabled:hover{
+    background:#eef1f5;color:#a3aebc;border-color:#e2e7ee;cursor:not-allowed}
+
+  .side footer{border-top:1px solid var(--line);padding:13px 18px;display:flex;gap:8px;flex-wrap:wrap;background:#f8fafc}
+  .side footer button{flex:1}
+
+  /* ---------- 右プレビュー ---------- */
+  .main{flex:1;display:flex;flex-direction:column;overflow:hidden}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:8px 14px;background:var(--panel);border-bottom:1px solid var(--line)}
+  .toolbar .sp{flex:1}
+  .toolbar .zoom{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--sub)}
+  .stage{flex:1;overflow:auto;padding:22px;display:flex;flex-direction:column;align-items:center;gap:22px}
+  .sheetwrap{position:relative;flex:0 0 auto}
+  .sheet{background:#fff;box-shadow:0 3px 16px rgba(20,40,70,.20);transform-origin:top left}
+  .sheet svg{display:block}
+
+  /* ---------- 印刷 ---------- */
+  @media print{
+    html,body{background:#fff;height:auto;overflow:visible}
+    .app{display:block;height:auto;overflow:visible}
+    .side,.toolbar{display:none!important}
+    .main{display:block;overflow:visible}
+    .stage{padding:0;gap:0;display:block}
+    .sheetwrap{height:auto!important;width:auto!important}
+    .sheet{box-shadow:none;transform:none!important;break-after:auto;page-break-after:auto;
+           -webkit-print-color-adjust:exact;print-color-adjust:exact}
+    body.p-dwg .w-ord{display:none!important}
+    body.p-ord .w-dwg{display:none!important}
+    /* 2枚まとめて出すときだけ、1枚目の後で改ページする */
+    body.p-both .w-dwg .sheet{break-after:page;page-break-after:always}
+  }
+</style>
+<style id="pageStyle"></style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ============ 入力 ============ -->
+  <div class="side">
+    <header>
+      <h1>ケラバ図メーカー</h1>
+      <p>数値を入れるとリアルタイムで作図 → A4でPDF出力　<span id="ver"></span></p>
+    </header>
+
+    <div id="updBar">新しいバージョンがあります。<b>ここをクリックして更新</b></div>
+
+    <div class="mode-tabs" role="tablist" aria-label="屋根材の種類">
+      <button class="mode-tab is-active" id="tabNormal" type="button" role="tab" aria-selected="true">通常</button>
+      <button class="mode-tab" id="tabTile" type="button" role="tab" aria-selected="false">瓦</button>
+    </div>
+
+    <div class="scroll" id="form">
+
+      <fieldset>
+        <legend>物件情報</legend>
+        <div class="row"><label>邸名</label><input type="text" id="name" value="" placeholder="◯◯様邸"></div>
+        <div class="row"><label>屋根勾配</label><input type="number" id="pitch" value="1.0" step="0.1" min="0.1" max="12"><span class="unit">寸</span></div>
+        <div class="row"><label>屋根材・色</label><input type="text" id="material" value="ガルバリウム"></div>
+        <div class="row"><label>破風板</label>
+          <select id="hafu">
+            <option value="on" selected>有り</option>
+            <option value="none">無し</option>
+          </select>
+        </div>
+        <div class="row"><label>鼻隠し板（水下）</label>
+          <select id="hanaShimo">
+            <option value="tatsu" selected>タツ</option>
+            <option value="kane">カネ</option>
+            <option value="cut2">勾配カット(上下)</option>
+            <option value="cut1">勾配カット(上部のみ)</option>
+            <option value="none">無し</option>
+          </select>
+        </div>
+        <div class="row"><label>鼻隠し板（水上）</label>
+          <select id="hanaKami">
+            <option value="tatsu" selected>タツ</option>
+            <option value="kane">カネ</option>
+            <option value="cut2">勾配カット(上下)</option>
+            <option value="cut1">勾配カット(上部のみ)</option>
+            <option value="none">無し</option>
+          </select>
+        </div>
+        <div class="row"><label>宛先</label><input type="text" id="client" value=""></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>部材寸法（前提条件）</legend>
+        <div class="row"><label>合板 厚</label><input type="number" id="tNoji" value="12" step="0.5"><span class="unit">mm</span></div>
+        <div class="row"><label>垂木 成</label><input type="number" id="hTaruki" value="60" step="1"><span class="unit">mm</span></div>
+        <input type="hidden" id="tHafu" value="30">
+        <input type="hidden" id="wHafu" value="150">
+        <input type="hidden" id="tHana" value="30">
+        <input type="hidden" id="hHanaKamiOrder" value="">
+        <input type="hidden" id="hHanaShimoOrder" value="">
+        <input type="hidden" id="tileHanaSOrder" value="175">
+        <input type="checkbox" id="fixHafu" checked hidden aria-hidden="true">
+        <input type="checkbox" id="fixHanaKami" hidden aria-hidden="true">
+        <input type="checkbox" id="fixHanaShimo" hidden aria-hidden="true">
+
+        <div class="normal-only">
+          <div class="row material-row"><label>破風板</label><div class="sizepair"><input type="number" id="normalHafuWidth" data-material-for="tHafu" step="1" aria-label="破風板の巾"><span class="times">ｘ</span><input type="number" id="normalHafuHeight" data-material-for="wHafu" step="1" aria-label="破風板の成"></div><label class="fixcheck"><input type="checkbox" data-fixed-for="fixHafu">固定</label></div>
+          <div class="row material-row"><label>鼻隠し（水上）</label><div class="sizepair"><input type="number" id="normalHanaKamiWidth" data-material-for="tHana" step="1" aria-label="水上鼻隠しの巾"><span class="times">ｘ</span><input type="number" id="normalHanaKamiHeight" data-material-for="hHanaKamiOrder" step="0.1" aria-label="水上鼻隠しの成"></div><label class="fixcheck"><input type="checkbox" data-fixed-for="fixHanaKami">固定</label></div>
+          <div class="row material-row"><label>鼻隠し（水下）</label><div class="sizepair"><input type="number" id="normalHanaShimoWidth" data-material-for="tHana" step="1" aria-label="水下鼻隠しの巾"><span class="times">ｘ</span><input type="number" id="normalHanaShimoHeight" data-material-for="hHanaShimoOrder" step="0.1" aria-label="水下鼻隠しの成"></div><label class="fixcheck"><input type="checkbox" data-fixed-for="fixHanaShimo">固定</label></div>
+        </div>
+
+        <div class="tile-only">
+          <div class="row material-row"><label>鼻隠し（水下）</label><div class="sizepair"><input type="number" id="tileHanaShimoWidth" data-material-for="tHana" step="1" aria-label="水下鼻隠しの巾"><span class="times">ｘ</span><input type="number" id="tileHanaShimoHeight" data-material-for="hHanaShimoOrder" step="1" aria-label="水下鼻隠しの成"></div><label class="fixcheck"><input type="checkbox" data-fixed-for="fixHanaShimo">固定</label></div>
+          <div class="row material-row"><label>破風板</label><div class="sizepair"><input type="number" id="tileHafuWidth" data-material-for="tHafu" step="1" aria-label="破風板の巾"><span class="times">ｘ</span><input type="number" id="tileHafuHeight" data-material-for="wHafu" step="1" aria-label="破風板の成"></div><label class="fixcheck"><input type="checkbox" data-fixed-for="fixHafu">固定</label></div>
+          <div class="row material-row"><label>鼻隠し（水上）</label><div class="sizepair"><input type="number" id="tileHanaKamiWidth" data-material-for="tHana" step="1" aria-label="水上鼻隠しの巾"><span class="times">ｘ</span><input type="number" id="tileHanaKamiHeight" data-material-for="hHanaKamiOrder" step="1" aria-label="水上鼻隠しの成"></div><label class="fixcheck"><input type="checkbox" data-fixed-for="fixHanaKami">固定</label></div>
+        </div>
+        <input type="checkbox" id="tileHafuAuto" checked hidden aria-hidden="true">
+      </fieldset>
+
+      <fieldset class="tile-only" id="tileOffsets">
+        <legend>瓦：天端オフセット</legend>
+        <div class="offset-group" data-offset-part="hafu">
+          <b>破風板 天端</b>
+          <div class="offset-grid no-side">
+            <select id="tileHafuRef" aria-label="破風板の基準"><option value="noji">合板天端</option><option value="taruki">垂木天端</option></select>
+            <select id="tileHafuDir" aria-label="破風板の方向"><option value="vertical">鉛直</option><option value="perpendicular" selected>勾配に垂直</option></select>
+            <input type="number" id="tileHafuOffset" value="20" step="1" aria-label="破風板のオフセット">
+            <span class="unit">mm</span>
+          </div>
+        </div>
+        <div class="offset-group" data-offset-part="hanaShimo">
+          <b>水下鼻隠し 天端</b>
+          <div class="offset-grid">
+            <select id="tileHanaSRef" aria-label="水下鼻隠しの基準"><option value="noji">合板天端</option><option value="taruki">垂木天端</option></select>
+            <select id="tileHanaSDir" aria-label="水下鼻隠しの方向"><option value="vertical">鉛直</option><option value="perpendicular">勾配に垂直</option></select>
+            <select id="tileHanaSSide" aria-label="水下鼻隠しの基準面"><option value="inner" selected>内寸</option><option value="outer">外寸</option></select>
+            <input type="number" id="tileHanaSOffset" value="40" step="1" aria-label="水下鼻隠しのオフセット">
+            <span class="unit">mm</span>
+          </div>
+        </div>
+        <div class="offset-group" data-offset-part="hanaKami">
+          <b>水上鼻隠し 天端</b>
+          <div class="offset-grid">
+            <select id="tileHanaKRef" aria-label="水上鼻隠しの基準"><option value="noji">合板天端</option><option value="taruki">垂木天端</option></select>
+            <select id="tileHanaKDir" aria-label="水上鼻隠しの方向"><option value="vertical">鉛直</option><option value="perpendicular">勾配に垂直</option></select>
+            <select id="tileHanaKSide" aria-label="水上鼻隠しの基準面"><option value="inner" selected>内寸</option><option value="outer">外寸</option></select>
+            <input type="number" id="tileHanaKOffset" value="40" step="1" aria-label="水上鼻隠しのオフセット">
+            <span class="unit">mm</span>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>母屋</legend>
+        <div class="row"><label>母屋 寸法（角）</label><input type="number" id="moyaSize" value="105" step="1"><span class="unit">mm</span></div>
+        <div class="row"><label>垂木欠き（母屋芯から）</label><input type="number" id="notchRef" value="22.5" step="0.5"><span class="unit">mm</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>合板の出</legend>
+        <div class="row"><label>合板の出（水下）</label><input type="number" id="ovShimo" value="82" step="1"><span class="unit">mm</span></div>
+        <div class="row"><label>合板の出（水上）</label><input type="number" id="ovKami" value="58" step="1"><span class="unit">mm</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>ケラバカット</legend>
+        <div class="row"><label>クリアランス</label><input type="number" id="clearance" value="0" step="1" min="0"><span class="unit">mm</span></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>表示・寸法線</legend>
+        <div class="boxgrp"><b>鼻隠し</b><div class="chkgrid">
+          <label class="chk"><input type="checkbox" id="dHana" checked>鼻隠し寸法</label>
+          <label class="chk"><input type="checkbox" id="dThick" checked>鼻隠し厚</label>
+        </div></div>
+
+        <div class="boxgrp"><b>勾配直角の寸法</b><div class="chkgrid">
+          <label class="chk"><input type="checkbox" id="dHafuW" checked>破風板寸法</label>
+          <label class="chk"><input type="checkbox" id="dTaruki" checked>垂木成</label>
+          <label class="chk"><input type="checkbox" id="dNoji" checked>合板厚</label>
+        </div></div>
+
+        <div class="boxgrp"><b>合板の出</b><div class="chkgrid">
+          <label class="chk"><input type="checkbox" id="dOverS" checked>水下合板寸法</label>
+          <label class="chk"><input type="checkbox" id="dOverK" checked>水上合板寸法</label>
+        </div></div>
+
+        <div class="boxgrp"><b>母屋</b><div class="chkgrid">
+          <label class="chk"><input type="checkbox" id="dMoyaW" checked>母屋寸法</label>
+          <label class="chk"><input type="checkbox" id="dCenter" checked>母屋芯線</label>
+          <label class="chk"><input type="checkbox" id="d225" checked>芯から22.5</label>
+        </div></div>
+
+        <div class="boxgrp"><b>ケラバカット</b><div class="chkgrid">
+          <label class="chk"><input type="checkbox" id="dHatch" checked>ケラバカット</label>
+          <label class="chk"><input type="checkbox" id="dMoya" checked>ケラバカット寸法</label>
+          <label class="chk"><input type="checkbox" id="dShort" checked>同（短い方）</label>
+          <label class="chk"><input type="checkbox" id="dClear" checked>クリアランス寸法</label>
+        </div></div>
+
+        <div class="boxgrp"><b>その他</b><div class="chkgrid">
+          <label class="chk"><input type="checkbox" id="dSlope" checked>勾配マーク</label>
+        </div></div>
+      </fieldset>
+
+      <fieldset>
+        <legend>スケール</legend>
+        <div class="row slider">
+          <span class="slend">縮</span>
+          <input type="range" id="total" min="300" max="1000" step="10" value="500">
+          <span class="slend">伸</span>
+        </div>
+      </fieldset>
+
+
+    </div>
+
+    <footer>
+      <div id="printWarning" class="print-warning" role="alert" aria-live="polite">
+        <div class="print-warning-head">
+          <strong>⚠ 寸法の確認が必要です</strong>
+          <label><input type="checkbox" id="ackWarning">OK（確認して出力）</label>
+        </div>
+        <ul id="printWarningList"></ul>
+      </div>
+      <button id="btnReset">既定値に戻す</button>
+      <button id="btnPrintDwg">ケラバ図PDF</button>
+      <button id="btnPrintOrd">発注書PDF</button>
+      <button class="primary" id="btnPrintBoth">両方PDF</button>
+    </footer>
+  </div>
+
+  <!-- ============ プレビュー ============ -->
+  <div class="main">
+    <div class="toolbar">
+      <strong style="font-size:13px">プレビュー</strong>
+      <span id="pgLabel" style="color:var(--sub);font-size:12px"></span>
+      <span class="sp"></span>
+      <div class="zoom">
+        表示倍率
+        <select id="zoom">
+          <option value="fit" selected>ウィンドウに合わせる</option>
+          <option value="0.5">50%</option>
+          <option value="0.75">75%</option>
+          <option value="1">100%</option>
+          <option value="1.5">150%</option>
+        </select>
+      </div>
+    </div>
+    <div class="stage" id="stage">
+      <div class="sheetwrap w-dwg" id="wrap"><div class="sheet land" id="sheet"></div></div>
+      <div class="sheetwrap w-ord" id="wrapOrd"><div class="sheet port" id="sheetOrd"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+/* =========================================================
+   1. パラメータ
+   ========================================================= */
+const FIELDS = {
+  name:'text', pitch:'num', material:'text', client:'text',
+  tNoji:'num', hTaruki:'num', tHafu:'num', wHafu:'num', tHana:'num',
+  hHanaKamiOrder:'num', hHanaShimoOrder:'num',
+  tileHanaSOrder:'num', tileHafuAuto:'bool',
+  fixHafu:'bool', fixHanaKami:'bool', fixHanaShimo:'bool',
+  moyaSize:'num', notchRef:'num',
+  total:'num', ovShimo:'num', ovKami:'num', hafu:'text', hanaShimo:'text', hanaKami:'text',
+  clearance:'num',
+  tileHafuRef:'text', tileHafuDir:'text', tileHafuOffset:'num',
+  tileHanaSRef:'text', tileHanaSDir:'text', tileHanaSSide:'text', tileHanaSOffset:'num',
+  tileHanaKRef:'text', tileHanaKDir:'text', tileHanaKSide:'text', tileHanaKOffset:'num',
+  dHana:'bool', dThick:'bool', dMoya:'bool', dShort:'bool', dClear:'bool', dHatch:'bool',
+  d225:'bool', dMoyaW:'bool', dCenter:'bool',
+  dHafuW:'bool', dTaruki:'bool', dNoji:'bool', dOverS:'bool', dOverK:'bool', dSlope:'bool',
+  orient:'text', fscale:'num', lscale:'num', note:'text',
+  ordHafu:'text',
+  ordHafuSp:'text', ordHafuLen:'text', ordHafuQty:'text',
+  ordHanaSSp:'text', ordHanaSLen:'text', ordHanaSQty:'text',
+  ordHanaKSp:'text', ordHanaKLen:'text', ordHanaKQty:'text'
+};
+
+const DEFAULTS = {
+  name:'', pitch:1.0, material:'ガルバリウム', client:'',
+  tNoji:12, hTaruki:60, wHafu:150, tHafu:30, tHana:30,
+  hHanaKamiOrder:null, hHanaShimoOrder:null,
+  tileHanaSOrder:175, tileHafuAuto:true,
+  fixHafu:true, fixHanaKami:false, fixHanaShimo:false,
+  moyaSize:105, notchRef:22.5,
+  total:500, ovShimo:82, ovKami:58, hafu:'on', hanaShimo:'tatsu', hanaKami:'tatsu',
+  clearance:0,
+  tileHafuRef:'noji', tileHafuDir:'perpendicular', tileHafuOffset:20,
+  tileHanaSRef:'noji', tileHanaSDir:'vertical', tileHanaSSide:'inner', tileHanaSOffset:40,
+  tileHanaKRef:'noji', tileHanaKDir:'vertical', tileHanaKSide:'inner', tileHanaKOffset:40,
+  dHana:true, dThick:true, dMoya:true, dShort:true, dClear:true, dHatch:true,
+  d225:true, dMoyaW:true, dCenter:true,
+  dHafuW:true, dTaruki:true, dNoji:true, dOverS:true, dOverK:true, dSlope:true,
+  orient:'landscape', fscale:1, lscale:1, note:'',
+  ordHafu:'p3',
+  ordHafuSp:'', ordHafuLen:'', ordHafuQty:'',
+  ordHanaSSp:'', ordHanaSLen:'', ordHanaSQty:'',
+  ordHanaKSp:'', ordHanaKLen:'', ordHanaKQty:''
+};
+const TILE_DEFAULTS = Object.assign({}, DEFAULTS, {
+  ovShimo:0, ovKami:0, fixHafu:false, fixHanaShimo:true, hHanaShimoOrder:175
+});
+
+const STORAGE_KEYS = {
+  normal: 'keraba_last_normal_v1',
+  tile: 'keraba_last_tile_v1'
+};
+const LEGACY_NORMAL_STORAGE_KEY = 'keraba_last_v2';
+const TILE_PLYWOOD_DEFAULTS_KEY = 'keraba_tile_plywood_defaults_v1';
+let activeMode = 'normal';
+
+function readForm(){
+  const p = {};
+  for(const k in FIELDS){
+    const el = document.getElementById(k);
+    if(!el) continue;
+    if(FIELDS[k]==='bool') p[k] = el.checked;
+    else if(FIELDS[k]==='num'){
+      const v = el.value.trim();
+      p[k] = (v==='') ? null : parseFloat(v);
+      if(p[k]!==null && !isFinite(p[k])) p[k]=null;
+    } else p[k] = el.value;
+  }
+  return p;
+}
+function writeForm(p){
+  for(const k in FIELDS){
+    const el = document.getElementById(k);
+    if(!el) continue;
+    const v = (k in p) ? p[k] : DEFAULTS[k];
+    if(FIELDS[k]==='bool') el.checked = !!v;
+    else el.value = (v===null||v===undefined) ? '' : v;
+  }
+}
+
+function loadSavedForm(mode){
+  const key = STORAGE_KEYS[mode];
+  let saved = null;
+  try{
+    saved = JSON.parse(localStorage.getItem(key)||'null');
+    // 既存の通常入力は、新しい通常タブへ一度だけ引き継ぐ。
+    if(!saved && mode==='normal'){
+      saved = JSON.parse(localStorage.getItem(LEGACY_NORMAL_STORAGE_KEY)||'null');
+    }
+    // 瓦は合板を破風・鼻隠しより外へ出さないため、初期値を0 mmへ移行する。
+    if(mode==='tile' && localStorage.getItem(TILE_PLYWOOD_DEFAULTS_KEY)!=='1'){
+      saved = Object.assign({}, saved||{}, {ovShimo:0, ovKami:0});
+      localStorage.setItem(TILE_PLYWOOD_DEFAULTS_KEY,'1');
+    }
+    // 既存の瓦入力には、水下鼻隠し成175 mmを基準とする破風板自動計算を追加する。
+    if(mode==='tile' && (!saved || !Object.prototype.hasOwnProperty.call(saved, 'tileHanaSOrder'))){
+      saved = Object.assign({}, saved||{}, {tileHanaSOrder:175, tileHafuAuto:true});
+    }
+    // 固定チェック導入前の保存値を引き継ぐ。通常は破風板基準、瓦は水下鼻隠し基準を既定にする。
+    if(!saved || !Object.prototype.hasOwnProperty.call(saved, 'fixHafu')){
+      const legacyHana = saved && saved.hHanaOrder;
+      const tileAuto = !saved || saved.tileHafuAuto!==false;
+      saved = Object.assign({}, saved||{}, mode==='tile'
+        ? {fixHafu:!tileAuto, fixHanaShimo:tileAuto, fixHanaKami:false,
+           hHanaShimoOrder:(saved&&saved.hHanaShimoOrder!=null)?saved.hHanaShimoOrder:(saved&&saved.tileHanaSOrder!=null?saved.tileHanaSOrder:175),
+           hHanaKamiOrder:(saved&&saved.hHanaKamiOrder!=null)?saved.hHanaKamiOrder:null}
+        : {fixHafu:true, fixHanaShimo:legacyHana!=null, fixHanaKami:legacyHana!=null,
+           hHanaShimoOrder:legacyHana!=null?legacyHana:null,
+           hHanaKamiOrder:legacyHana!=null?legacyHana:null});
+    }
+  }catch(e){}
+  return Object.assign({}, mode==='tile'?TILE_DEFAULTS:DEFAULTS, saved||{});
+}
+
+function saveCurrentForm(){
+  try{ localStorage.setItem(STORAGE_KEYS[activeMode], JSON.stringify(readForm())); }catch(e){}
+}
+
+/* =========================================================
+   2. 幾何計算
+   ========================================================= */
+function geometry(p){
+  const num = (v,d)=> (v===null||v===undefined||!isFinite(v)) ? d : v;
+
+  const pitch  = Math.max(0.05, num(p.pitch, 1));
+  const tan    = pitch/10;
+  const th     = Math.atan(tan);
+  const cos    = Math.cos(th), sin = Math.sin(th);
+
+  const tNoji   = Math.max(0, num(p.tNoji,12));
+  const hTaruki = Math.max(1, num(p.hTaruki,60));
+  const tHafu   = Math.max(1, num(p.tHafu,27));
+  let wHafu     = Math.max(10, num(p.wHafu,145));
+  const tHana   = Math.max(1, num(p.tHana,27));
+
+  const hasHafu = (p.hafu !== 'none');     // 破風板を付けるか
+  const MODE = v => (v==='kane'||v==='none'||v==='cut1'||v==='cut2') ? v : 'tatsu';
+  const modeS = MODE(p.hanaShimo);   // 水下
+  const modeK = MODE(p.hanaKami);    // 水上
+  const isCut = m => (m==='cut1'||m==='cut2');
+  const fixedValue = v => (v===null||v===undefined||!isFinite(v)) ? null : Math.max(10,v);
+  const hOrderS = fixedValue(p.hHanaShimoOrder);
+  const hOrderK = fixedValue(p.hHanaKamiOrder);
+  const fixHafu = !!p.fixHafu;
+  const fixS = !!p.fixHanaShimo && hOrderS!==null;
+  const fixK = !!p.fixHanaKami && hOrderK!==null;
+  const totalW = Math.max(tHana*3+50, num(p.total,500));   // 鼻隠し外面〜外面
+  const L      = totalW - tHana;                            // 左鼻隠し左面→右鼻隠し左面
+
+  // 4本の勾配ライン（y は下向き正）
+  const lnC = x => -x*tan - tNoji/cos;      // 野地板天
+  const lnD = x => -x*tan;                  // 野地板下端＝垂木天
+  const lnB = x => -x*tan + hTaruki/cos;    // 垂木下端
+
+  // 瓦では、各部材の天端を基準線から鉛直または勾配直角にずらす。
+  // 通常では全て垂木天端・オフセット0として、従来の位置を保つ。
+  const isTile = p.roofMode==='tile';
+  const topOffset = (ref, dir, side, value, extraVerticalShift=0)=>{
+    const base = (isTile && ref==='noji') ? lnC : lnD;
+    const d = isTile ? num(value,0) : 0;
+    const shift = (isTile && dir==='perpendicular') ? d/cos : d;
+    // line は実部材の作図位置、guideLine は選択した内面・外面の寸法基準。
+    // タツの水平な天端では両者が板厚分だけずれる場合がある。
+    return {ref:(isTile && ref==='noji')?'noji':'taruki', dir:(isTile && dir==='perpendicular')?'perpendicular':'vertical',
+            side:(isTile && side==='outer')?'outer':'inner', value:d,
+            line:x=>base(x)-shift-extraVerticalShift,
+            guideLine:x=>base(x)-shift};
+  };
+  const offHafu = topOffset(p.tileHafuRef, p.tileHafuDir, 'inner', p.tileHafuOffset);
+  // タツの水下鼻隠しは上端が水平。内寸なら、方向に関係なく内側天端を基準線へ合わせる。
+  const shimoInnerFaceAdjust =
+    (isTile && modeS==='tatsu' && p.tileHanaSSide!=='outer')
+      ? tHana*tan : 0;
+  const offS = topOffset(p.tileHanaSRef, p.tileHanaSDir, p.tileHanaSSide, p.tileHanaSOffset,
+                         shimoInnerFaceAdjust);
+  // 水上のタツは、外寸なら外側天端を基準線へ合わせる。
+  const kamiOuterFaceAdjust =
+    (isTile && modeK==='tatsu' && p.tileHanaKSide==='outer')
+      ? tHana*tan : 0;
+  const offK = topOffset(p.tileHanaKRef, p.tileHanaKDir, p.tileHanaKSide, p.tileHanaKOffset,
+                         kamiOuterFaceAdjust);
+  const lnHafu = offHafu.line;
+
+  // 鼻隠しの下端を破風板下端へ揃えたときの成を返す。
+  // 瓦の破風板自動計算では、水下鼻隠し成を175 mm（初期値）へ合わせるために使う。
+  function autoFaceForHafu(mode, top, xOuter, into, hafuFace){
+    const xInner = xOuter + into*tHana;
+    const x0 = Math.min(xOuter, xInner), x1 = Math.max(xOuter, xInner);
+    const lnAAt = x => lnHafu(x) + hafuFace/cos;
+    if(mode==='kane') return (lnAAt(0)-top.line(0))*cos;
+    if(mode==='cut2') return lnAAt(x0)-top.line(x0)+tHana*tan;
+    if(mode==='cut1') return lnAAt(x0)-top.line(x1);
+    return lnAAt(x1)-top.line(x0);           // タツ
+  }
+  // 固定されていない破風板は、固定された鼻隠し（水下を優先）へ下端が揃う成を逆算する。
+  if(!fixHafu){
+    const base = fixS && modeS!=='none'
+      ? {mode:modeS, top:offS, x:0, into:+1, target:hOrderS}
+      : (fixK && modeK!=='none' ? {mode:modeK, top:offK, x:totalW, into:-1, target:hOrderK} : null);
+    if(base){
+      const atZero = autoFaceForHafu(base.mode, base.top, base.x, base.into, 0);
+      const atHundred = autoFaceForHafu(base.mode, base.top, base.x, base.into, 100);
+    const unit = (atHundred-atZero)/100;
+      if(Math.abs(unit)>0.0001) wHafu = Math.max(10, (base.target-atZero)/unit);
+    }
+  }
+  const lnA = x => lnHafu(x) + wHafu/cos;   // 破風板下端
+
+  // 各鼻隠しの下端は破風板下端へ揃え、天端位置から成を自動計算する。
+  const autoFace = (mode, top, xOuter, into) => autoFaceForHafu(mode, top, xOuter, into, wHafu);
+  const autoS = autoFace(modeS, offS, 0, +1);
+  const autoK = autoFace(modeK, offK, totalW, -1);
+  const hTatsu = autoS;
+  const pick = (m, face, fixed, value)=> (m==='none') ? 0 : (fixed ? value : face);
+  const faceS = pick(modeS, autoS, fixS, hOrderS);
+  const faceK = pick(modeK, autoK, fixK, hOrderK);
+  const hS = faceS;
+  const hHana = hTatsu;
+
+  const moyaSize = Math.max(10, num(p.moyaSize,105));
+  const notchRef = num(p.notchRef,22.5);      // 母屋芯から水下側へ
+  // 垂木の木口が基準。マイナスなら木口より内側で合板を止める。
+  // 空欄（null）なら「合板を切らない」＝垂木と同じ長さで線を止め、小口も寸法も描かない
+  const orNull = v => (v===null||v===undefined||!isFinite(v)) ? null : v;
+  const ovS    = orNull(p.ovShimo);                         // 合板の出（水下＝左）
+  const ovK    = orNull(p.ovKami);                          // 合板の出（水上＝右）
+  const capS   = (ovS !== null);                            // 水下の小口を描くか
+  const capK   = (ovK !== null);
+
+  // 鼻隠し板（水下＝左／水上＝右）。外面が垂木天と交わる x を基準に組み立てる。
+  //   タツ：厚みは水平、見付は鉛直。左上角が垂木天に乗る。
+  //   カネ：厚みは勾配方向、見付は勾配直角。上辺が垂木天、下辺が破風板下端に一致。
+  //   無し：板を描かない（切妻の水上どうしなど）。垂木木口＝図の端とみなす。
+  //   innerX＝内面（＝垂木の木口）が垂木天と交わる x。合板の出はここが基準。
+  function makeBoard(mode, xOuter, into, face, top){  // into=+1:内側が水上向き(左端) / -1:(右端)
+    if(mode==='none')
+      return {mode, poly:null, innerX:xOuter, outerX:xOuter, aX:xOuter, bX:xOuter, face:0};
+    if(mode==='cut1' || mode==='cut2'){
+      const xi=xOuter+into*tHana, x0=Math.min(xOuter,xi), x1=Math.max(xOuter,xi);
+      const dif = tHana*tan;                     // 厚み分の勾配落ち＝C
+      const shortF = face - dif;                 // 短い方の成＝D
+      let poly, yb;
+      if(mode==='cut1'){                         // 上部のみ：上端は勾配なり、下端は水平
+        yb = top.line(x1) + face;
+        poly = [[x0,top.line(x0)],[x1,top.line(x1)],[x1,yb],[x0,yb]];
+      }else{                                     // 上下：上端・下端とも勾配なり（平行四辺形）
+        poly = [[x0,top.line(x0)],[x1,top.line(x1)],[x1,top.line(x1)+shortF],[x0,top.line(x0)+shortF]];
+        yb = top.line(x0)+shortF;                // いちばん下（x0側の下端）
+      }
+      return {mode, cut:true, cutBoth:(mode==='cut2'),
+              poly, diag:[poly[0],poly[2]],
+              short:[[xOuter,top.line(x1)],[xOuter,top.line(x1)+shortF]],   // 短い方の成＝D
+              full :[[xOuter,top.line(x1)],[xOuter,yb]],                     // 長い方＝B（発注寸法）
+              gap  :[[xOuter,top.line(x0)],[xOuter,top.line(x1)]],          // 差＝C
+              outer:[[xOuter,top.line(x1)],[xOuter,yb]],
+              thick:[[x0,yb],[x1,yb]],          // 厚みは水平に測る（勾配はつかない）
+              outDir:[0,1], innerX:xi, outerX:xOuter,
+              face, faceShort:shortF,
+              aX:x0, bX:(into>0?x1:x0)};
+    }
+    if(mode==='tatsu'){
+      const xi=xOuter+into*tHana, x0=Math.min(xOuter,xi), x1=Math.max(xOuter,xi), y0=top.line(x0);
+      return {mode, poly:[[x0,y0],[x1,y0],[x1,y0+face],[x0,y0+face]],
+              diag:[[x0,y0],[x1,y0+face]],
+              outer:[[xOuter,top.line(x0)],[xOuter,y0+face]],   // 成を測る外面（鉛直）
+              thick:[[x0,y0+face],[x1,y0+face]],                // 鼻隠し厚（水平）
+              outDir:[0,1], innerX:xi, outerX:xOuter,
+              face, aX:x1, bX:(into>0?x1:x0)};
+    }
+    const O=[xOuter,top.line(xOuter)];                            // 外面×鼻隠し天端
+    const I=[xOuter+into*tHana*cos, top.line(xOuter)-into*tHana*sin];
+    const dn=[face*sin, face*cos];                                // 成の方向（直角下向き）
+    const Ob=[O[0]+dn[0],O[1]+dn[1]], Ib=[I[0]+dn[0],I[1]+dn[1]];
+    const ul = (into>0)?O:I, lr = (into>0)?Ib:Ob;                 // 左上→右下の対角
+    return {mode, poly:[O,I,Ib,Ob], diag:[ul,lr],
+            outer:[O,Ob], thick:[Ob,Ib], outDir:[sin,cos], innerX:I[0], outerX:xOuter, face,
+            aX:xOuter+wHafu*sin, bX:I[0]+hTaruki*sin};
+  }
+  const bS = makeBoard(modeS, 0,      +1, faceS, offS);
+  const bK = makeBoard(modeK, totalW, -1, faceK, offK);
+  const hK = faceK;
+
+  // 合板（野地板）の端部は常にカネ＝合板に対して直角。
+  // 出は「垂木の木口（＝鼻隠し内面）から合板先端まで」を合板下端ラインに沿って測る。
+  // 天端の端点は直角方向へ板厚ぶん寄るため、x が tNoji*sin だけ水下側にずれる。
+  const xEndL = bS.innerX - (capS ? ovS*cos : 0);
+  const xEndR = bK.innerX + (capK ? ovK*cos : 0);
+  const endLD = [xEndL, lnD(xEndL)];
+  const endRD = [xEndR, lnD(xEndR)];
+  // 切るときだけ天端が直角方向へずれる。切らないときは垂木木口で真っ直ぐ止める
+  const endLC = capS ? [xEndL - tNoji*sin, lnC(xEndL - tNoji*sin)] : [xEndL, lnC(xEndL)];
+  const endRC = capK ? [xEndR - tNoji*sin, lnC(xEndR - tNoji*sin)] : [xEndR, lnC(xEndR)];
+
+  // ケラバカット位置＝破風板下端と平行、そこからクリアランスぶん上（直角方向）
+  const clearance = Math.max(0, num(p.clearance,0));
+  const lnCut = x => lnA(x) - clearance/cos;
+
+  // 母屋（1本・図の中央）
+  const xc      = totalW/2;
+  const xL      = xc - moyaSize/2;
+  const xNotch  = xc - notchRef;            // 垂木欠き位置
+  const moya    = { xL, xR:xL+moyaSize, xc, xNotch, yT: lnB(xNotch) };
+
+  // ケラバカット寸法は、天端オフセット後の実際の位置から求める。
+  const dimMoya = lnCut(moya.xL) - moya.yT;
+  const dimMoyaShort = lnCut(moya.xR) - moya.yT;
+
+  // 瓦の鼻隠し発注寸法は小数を切り上げ、部材が不足しないようにする。
+  const ord = (m, face, fixed, value) => fixed ? value : (isTile ? Math.ceil(face-1e-9) : Math.round(face));
+  // 瓦の自動計算で生じた小数は、板が不足しないよう発注寸法を必ず切り上げる。
+  const hafuOrderW = (isTile && !fixHafu) ? Math.ceil(wHafu-1e-9) : wHafu;
+  return {pitch,tan,th,cos,sin,tNoji,hTaruki,tHafu,wHafu,hafuOrderW,tHana,hHana,hTatsu,hasHafu,
+          moyaSize,notchRef,moya,totalW,L,ovS,ovK,xEndL,xEndR,endLD,endLC,endRD,endRC,
+          modeS,modeK,bS,bK,hS,hK,clearance,capS,capK,
+          lnA,lnB,lnC,lnD,lnHafu,lnCut,dimMoya,dimMoyaShort,isTile,
+          offsets:{hafu:offHafu, shimo:offS, kami:offK},
+          faceAutoS:autoS, faceAutoK:autoK,
+          hHanaOrderS:ord(modeS, faceS, fixS, hOrderS), hHanaOrderK:ord(modeK, faceK, fixK, hOrderK)};
+}
+
+function fmt(v){
+  const r = Math.round(v*10)/10;
+  return (Math.abs(r-Math.round(r))<1e-9) ? String(Math.round(r)) : r.toFixed(1);
+}
+const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+/* 多角形を「ライン(x)より下」で切り取る（ケラバカットの落とし部） */
+function clipBelow(poly, lineFn){
+  const f = pt => pt[1] - lineFn(pt[0]);
+  const inter = (a,b)=>{
+    const fa=f(a), fb=f(b), t = fa/(fa-fb);
+    return [a[0]+t*(b[0]-a[0]), a[1]+t*(b[1]-a[1])];
+  };
+  const out=[];
+  for(let i=0;i<poly.length;i++){
+    const cur=poly[i], prev=poly[(i+poly.length-1)%poly.length];
+    const ci=f(cur)>=0, pi=f(prev)>=0;
+    if(ci){ if(!pi) out.push(inter(prev,cur)); out.push(cur); }
+    else if(pi){ out.push(inter(prev,cur)); }
+  }
+  return out;
+}
+
+/* =========================================================
+   3. 作図（論理座標＝A4横 297×210 mm）
+   ========================================================= */
+const SW = 297, SH = 210;
+
+function buildContent(p, g){
+  const o  = [];
+  const LS = Math.max(.4, p.lscale||1);
+  const FS = Math.max(.5, p.fscale||1);
+  const ROT = (p.orient==='portrait') ? 90 : 0;   // 用紙の回転量（文字の向き判定に使用）
+
+  const W_OUT = (0.34*LS).toFixed(2);   // 外形線
+  const W_THN = (0.18*LS).toFixed(2);   // 細線
+  const W_DIM = (0.16*LS).toFixed(2);   // 寸法線
+  // 現場で読める大きさを優先（参考図面とほぼ同等）
+  const F_DIM = 7.0*FS, F_TTL = 11.0*FS, F_MAT = 7.0*FS, F_NOTE = 11.5*FS, F_SML = 6.0*FS;
+
+  /* ---- 表題・注記の帯を文字サイズから決め、残りを作図領域にする ---- */
+  const yTitle = 9 + F_TTL;
+  const yMat   = yTitle + F_MAT*1.4;
+  const headB  = (p.material ? yMat : yTitle) + 6;
+  const noteLines = [];
+  if(g.hasHafu) noteLines.push(`破風板：${fmt(g.tHafu)}ｘ${fmt(g.hafuOrderW)}`);
+  const okS = g.modeS!=='none', okK = g.modeK!=='none';
+  if(okS && okK && g.hHanaOrderS===g.hHanaOrderK)
+    noteLines.push(`鼻隠し：${fmt(g.tHana)}ｘ${fmt(g.hHanaOrderS)}`);
+  else {
+    if(okS) noteLines.push(`${okK?'水下':''}鼻隠し：${fmt(g.tHana)}ｘ${fmt(g.hHanaOrderS)}`);
+    if(okK) noteLines.push(`${okS?'水上':''}鼻隠し：${fmt(g.tHana)}ｘ${fmt(g.hHanaOrderK)}`);
+  }
+  const noteStep = F_NOTE*1.35;
+  const yNote2 = SH - 9;
+  const footT  = yNote2 - (noteLines.length-1)*noteStep - F_NOTE - 5;
+
+  const OFF  = F_DIM*1.35;         // 寸法線の逃げ量（文字サイズに追従）
+  const SIDE  = OFF*1.5;           // 左右の成寸法に必要な余白
+  const EXTRA = F_DIM*1.7;         // 勾配カットで寸法を二重に引くぶん
+
+  /* ---- 描画領域とスケール ---- */
+  const cutM = (g.bS.cut||g.bK.cut) ? EXTRA : 0;
+  const area = {x0:11+SIDE+cutM, y0:headB, x1:SW-11-SIDE-cutM, y1:footT};
+
+  const xs = [g.endLC[0], g.endLD[0], g.endRC[0], g.endRD[0], g.moya.xL, g.moya.xR];
+  const ys = [g.endLC[1], g.endLD[1], g.endRC[1], g.endRD[1],
+              g.moya.yT, g.moya.yT+g.moyaSize];
+  [g.bS,g.bK].forEach(b=>{ if(b.poly) b.poly.forEach(q=>{ xs.push(q[0]); ys.push(q[1]); }); });
+  if(g.hasHafu) [g.bS.aX,g.bK.aX].forEach(x=>{ xs.push(x); ys.push(g.lnA(x)); });
+  // 瓦の点線ガイドと天端位置も縮尺計算へ含め、用紙端からはみ出さないようにする。
+  if(g.isTile){
+    [g.offsets.hafu.guideLine, g.offsets.shimo.guideLine, g.offsets.kami.guideLine].forEach(lineY=>{
+      [0, g.totalW].forEach(x=>{ xs.push(x); ys.push(lineY(x)); });
+    });
+  }
+
+  const minX=Math.min(...xs), maxX=Math.max(...xs);
+  const minY=Math.min(...ys), maxY=Math.max(...ys);
+  const bw=Math.max(1,maxX-minX), bh=Math.max(1,maxY-minY);
+
+  // 図の外側にはみ出す寸法（上：合板の出、下：母屋寸法・鼻隠し厚）も含めて、
+  // 表題と注記の間に収まる最大の倍率を求める。はみ出さないときは縮めない。
+  const AH = area.y1 - area.y0;
+  const tops = [[minY, ()=>0]];
+  const bots = [[maxY, ()=>0]];
+  if(p.dOverS && g.capS && Math.abs(g.ovS)>0.01) tops.push([g.endLC[1], kk=> g.tNoji*kk + F_DIM*2.6]);
+  if(p.dOverK && g.capK && Math.abs(g.ovK)>0.01) tops.push([g.endRC[1], kk=> g.tNoji*kk + F_DIM*2.6]);
+  if(p.dMoyaW) bots.push([g.moya.yT+g.moyaSize, ()=> OFF + F_DIM*0.4]);
+  if(p.dThick) [g.bS,g.bK].forEach(b=>{ if(b.poly) bots.push([b.thick[0][1], ()=> OFF + F_DIM*0.4]); });
+  const extent = kk=>{
+    const t = Math.min(...tops.map(([y,e])=> kk*y - e(kk)));
+    const b = Math.max(...bots.map(([y,e])=> kk*y + e(kk)));
+    return [t, b];
+  };
+  let lo = 0, hi = (area.x1-area.x0)/bw;
+  if((()=>{ const [t,b]=extent(hi); return b-t > AH; })()){
+    for(let i=0;i<40;i++){ const mid=(lo+hi)/2; const [t,b]=extent(mid); if(b-t<=AH) lo=mid; else hi=mid; }
+    hi = lo;
+  }
+  const k  = hi;
+  const [eT, eB] = extent(k);
+  const ox = area.x0 + ((area.x1-area.x0)-bw*k)/2 - minX*k;
+  const oy = area.y0 + (AH - (eB-eT))/2 - eT;
+  const PX = x => ox + k*x;
+  const PY = y => oy + k*y;
+
+  /* ---- 低レベル描画 ---- */
+  const N = v => (Math.round(v*1000)/1000);
+  function line(x1,y1,x2,y2,w,dash){
+    o.push(`<line x1="${N(x1)}" y1="${N(y1)}" x2="${N(x2)}" y2="${N(y2)}" stroke="#000" stroke-width="${w||W_THN}"`
+      + (dash?` stroke-dasharray="${dash}"`:``) + ` stroke-linecap="round"/>`);
+  }
+  function dot(x,y,r){
+    o.push(`<circle cx="${N(x)}" cy="${N(y)}" r="${N(r)}" fill="#000"/>`);
+  }
+  function poly(pts,w,fill){
+    o.push(`<polygon points="${pts.map(q=>N(q[0])+','+N(q[1])).join(' ')}" fill="${fill||'none'}" stroke="${w?'#000':'none'}" stroke-width="${w||0}"/>`);
+  }
+  function text(x,y,s,size,anchor,rot,weight){
+    if(s===''||s===null||s===undefined) return;
+    const tr = rot ? ` transform="translate(${N(x)},${N(y)}) rotate(${N(rot)})"` : '';
+    const xy = rot ? `x="0" y="0"` : `x="${N(x)}" y="${N(y)}"`;
+    o.push(`<text ${xy}${tr} font-size="${N(size)}" text-anchor="${anchor||'start'}" `
+      + `font-family="'Yu Gothic UI','Meiryo','MS PGothic',sans-serif" `
+      + `font-weight="${weight||400}" fill="#000">${esc(s)}</text>`);
+  }
+
+  /* ---- 寸法線（汎用・任意方向） ---- */
+  function dim(ax,ay,bx,by,off,label){
+    const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy);
+    if(len<1e-6) return;
+    const ux=dx/len, uy=dy/len;
+    const nx=-uy, ny=ux;                       // 法線
+    const a2=[ax+nx*off, ay+ny*off], b2=[bx+nx*off, by+ny*off];
+
+    if(Math.abs(off)>0.01){                    // 補助線
+      const s = off>0?1:-1, ext=1.8;
+      line(ax+nx*s*1.0, ay+ny*s*1.0, a2[0]+nx*s*ext, a2[1]+ny*s*ext, W_DIM);
+      line(bx+nx*s*1.0, by+ny*s*1.0, b2[0]+nx*s*ext, b2[1]+ny*s*ext, W_DIM);
+    }
+    line(a2[0],a2[1],b2[0],b2[1],W_DIM);       // 寸法線
+
+    // 寸法の端部は矢印ではなく黒丸で統一する。短い寸法でも外へ逃がす必要がない。
+    dot(a2[0],a2[1],0.575*LS);
+    dot(b2[0],b2[1],0.575*LS);
+
+    // 文字（用紙上で上下逆さにならないよう、用紙の回転量ROTを加味して正規化）
+    let ang = Math.atan2(uy,ux)*180/Math.PI;
+    let fx=ux, fy=uy;
+    if(ang+ROT>90.0001 || ang+ROT<=-90){ ang+=180; fx=-ux; fy=-uy; }
+    const mx=(a2[0]+b2[0])/2, my=(a2[1]+b2[1])/2;
+    // 寸法値は、先に確定した注記に重なる場合だけ寸法線に沿って少し退避する。
+    // 線から離すのではなく線の方向へ動かすため、どの寸法を示すかは保たれる。
+    const placed=placeDimensionLabel(mx+fy*1.3, my-fx*1.3, label, ang, ux, uy, len);
+    text(placed.x, placed.y, label, F_DIM, 'middle', ang);
+  }
+
+  /* ---- 屋根ライン ---- */
+  const P2 = q => [PX(q[0]),PY(q[1])];
+  const seg = (a,b,w)=>{ const A=P2(a),B=P2(b); line(A[0],A[1],B[0],B[1],w); };
+
+  // SVG の実際の文字幅に近い近似値で、注記同士・寸法値との干渉を判定する。
+  // 全角は1em、半角は0.55emとして扱い、余白を含めた外接矩形を使う。
+  const textWidth = (s,size) => Array.from(String(s)).reduce((w,ch)=>
+    w + (ch.charCodeAt(0)>0xff ? 1 : .55)*size, 0);
+  const textBox = (x,y,s,size,anchor='start',rot=0,pad=1.2)=>{
+    const w=textWidth(s,size), h=size;
+    const left=anchor==='middle' ? -w/2 : (anchor==='end' ? -w : 0);
+    const a=rot*Math.PI/180, c=Math.cos(a), si=Math.sin(a);
+    const pts=[[left,-h*.82],[left+w,-h*.82],[left+w,h*.18],[left,h*.18]].map(([dx,dy])=>[
+      x+dx*c-dy*si, y+dx*si+dy*c
+    ]);
+    const xs=pts.map(q=>q[0]), ys=pts.map(q=>q[1]);
+    return {x0:Math.min(...xs)-pad,y0:Math.min(...ys)-pad,x1:Math.max(...xs)+pad,y1:Math.max(...ys)+pad};
+  };
+  const boxesOverlap = (a,b) => a && b && a.x0<b.x1 && a.x1>b.x0 && a.y0<b.y1 && a.y1>b.y0;
+  const dimTextBox = (ax,ay,bx,by,off,label)=>{
+    const dx=bx-ax, dy=by-ay, len=Math.hypot(dx,dy);
+    if(len<1e-6) return null;
+    const ux=dx/len, uy=dy/len, nx=-uy, ny=ux;
+    const a2=[ax+nx*off, ay+ny*off], b2=[bx+nx*off, by+ny*off];
+    let ang=Math.atan2(uy,ux)*180/Math.PI, fx=ux, fy=uy;
+    if(ang+ROT>90.0001 || ang+ROT<=-90){ ang+=180; fx=-ux; fy=-uy; }
+    const mx=(a2[0]+b2[0])/2, my=(a2[1]+b2[1])/2;
+    return textBox(mx+fy*1.3, my-fx*1.3, label, F_DIM, 'middle', ang);
+  };
+  // 注記同士の衝突台帳。部材の全体寸法など、先に描いた値を優先して守る。
+  const occupiedTextBoxes=[];
+  const placeDimensionLabel = (x,y,label,angle,ux,uy,len)=>{
+    const step=Math.max(F_DIM*.9, 1.8);
+    const maxShift=Math.min(len*.32, step*5);
+    const shifts=[0];
+    for(let n=1;n<=5;n++){
+      const d=n*step;
+      if(d<=maxShift+1e-6) shifts.push(d,-d);
+    }
+    for(const shift of shifts){
+      const cx=x+ux*shift, cy=y+uy*shift;
+      const box=textBox(cx,cy,label,F_DIM,'middle',angle);
+      if(!occupiedTextBoxes.some(old=>boxesOverlap(box,old))){
+        occupiedTextBoxes.push(box);
+        return {x:cx,y:cy};
+      }
+    }
+    // 退避余地がないときは、基準位置を維持して寸法の意味を優先する。
+    const box=textBox(x,y,label,F_DIM,'middle',angle);
+    occupiedTextBoxes.push(box);
+    return {x,y};
+  };
+  seg(g.endLC,g.endRC,W_OUT);                                                  // 野地板天
+  // 垂木天は合板の出がマイナスでも鼻隠しまで通す（合板下端と同じライン）
+  const dL = g.isTile ? g.bS.innerX : Math.min(g.endLD[0], 0);
+  const dR = g.isTile ? g.bK.innerX : Math.max(g.endRD[0], g.totalW);
+  line(PX(dL),PY(g.lnD(dL)), PX(dR),PY(g.lnD(dR)), W_OUT);                    // 野地板下端＝垂木天
+  if(g.capS) seg(g.endLD,g.endLC,W_OUT);                                       // 水下小口（カネ＝合板に直角）
+  if(g.capK) seg(g.endRD,g.endRC,W_OUT);                                       // 水上小口（カネ＝合板に直角）
+  line(PX(g.bS.bX),PY(g.lnB(g.bS.bX)),PX(g.bK.bX),PY(g.lnB(g.bK.bX)),W_OUT);   // 垂木下端
+  // 水上の鼻隠しが無し＝外壁に当たる／切妻で垂木同士が合わさる。
+  // 垂木（と破風板）の端をタツ（鉛直）で切った線で閉じる
+  if(g.modeK==='none'){
+    const xc = g.totalW;
+    const yb = g.hasHafu ? g.lnA(xc) : g.lnB(xc);
+    line(PX(xc),PY(g.lnD(xc)),PX(xc),PY(yb),W_OUT);
+  }
+  if(g.hasHafu){
+    line(PX(g.bS.aX),PY(g.lnHafu(g.bS.aX)),PX(g.bK.aX),PY(g.lnHafu(g.bK.aX)),W_OUT,
+         g.isTile ? '2.2 1.5' : null); // 瓦では破風板ラインを点線で表示
+    line(PX(g.bS.aX),PY(g.lnA(g.bS.aX)),PX(g.bK.aX),PY(g.lnA(g.bK.aX)),W_OUT);        // 破風板下端
+  }
+
+  /* ---- 鼻隠し板（タツ／カネ） ---- */
+  function drawBoard(b){
+    poly(b.poly.map(P2), W_OUT);
+    seg(b.diag[0], b.diag[1], W_THN);      // 対角（見切り）
+  }
+  if(g.bS.poly) drawBoard(g.bS);
+  if(g.bK.poly) drawBoard(g.bK);
+
+  // オフセット寸法は部材内側を優先する。ガイドラベル側がこの文字矩形を避ける。
+  const offsetPlans = [];
+  const makeOffsetPlan = (item, x, off)=>{
+    const refLine = item.ref==='noji' ? g.lnC : g.lnD;
+    const a=[x,refLine(x)];
+    const targetX=item.dir==='perpendicular' ? x-item.value*g.sin : x;
+    const b=[targetX,item.guideLine(targetX)];
+    const A=P2(a), B=P2(b), label=fmt(item.value);
+    return {A,B,off,label,box:dimTextBox(A[0],A[1],B[0],B[1],off,label)};
+  };
+  if(g.isTile){
+    if(g.hasHafu) offsetPlans.push(makeOffsetPlan(g.offsets.hafu, g.totalW*.62, -OFF*1.25));
+    if(g.bS.poly) offsetPlans.push(makeOffsetPlan(g.offsets.shimo,
+      g.offsets.shimo.side==='outer' ? g.bS.outerX : g.bS.innerX, SIDE*.9));
+    if(g.bK.poly) offsetPlans.push(makeOffsetPlan(g.offsets.kami,
+      g.offsets.kami.side==='outer' ? g.bK.outerX : g.bK.innerX, -SIDE*.9));
+  }
+
+  // 瓦の位置基準ライン。水下・水上の条件が一致するときだけ鼻隠しラインを共通化する。
+  if(g.isTile){
+    const guideBoxes=[];
+    const guide = (label, lineY, x0, x1, preferredTx, direction)=>{
+      line(PX(x0),PY(lineY(x0)),PX(x1),PY(lineY(x1)),W_DIM,'2.2 1.5');
+      // ▼は実際の三角形で描き、先端を必ず対応する点線へ接触させる。
+      // 文字は勾配に沿わせ、下端を▼先端へ揃える。板の内側へクランプし、
+      // オフセット寸法と重なるときだけ勾配方向へ段階的に退避する。
+      const ux=g.cos, uy=-g.sin;
+      // ▼は文字より目立ちすぎないよう、従来の約半分の大きさにする。
+      // 文字の基準点は従来どおり▼先端から取り、下端揃えを保つ。
+      const triW=F_SML*.41;
+      const textStart=triW+F_SML*.28;
+      const textRun=textStart+textWidth(label,F_SML);
+      const margin=F_SML*.55/k;
+      const leftBound=(g.bS.poly ? g.bS.innerX : x0)+margin;
+      const rightBound=(g.bK.poly ? g.bK.innerX : x1)-margin;
+      const maxTx=rightBound-(textRun*ux)/k;
+      const minTx=Math.min(leftBound,maxTx);
+      const baseTx=Math.max(minTx,Math.min(maxTx,preferredTx));
+      const step=Math.max(5,(F_SML*1.35)/(k*Math.max(.2,ux)));
+      const moves=[0,1,2,3,4].flatMap(n=>n===0?[0]:[direction*n*step,-direction*n*step]);
+      let tx=baseTx, labelBox=null;
+      for(const move of moves){
+        const candidate=Math.max(minTx,Math.min(maxTx,baseTx+move));
+        const tip0=[PX(candidate),PY(lineY(candidate))];
+        const box=textBox(tip0[0]+ux*textStart,tip0[1]+uy*textStart,label,F_SML,'start',-g.th*180/Math.PI);
+        if(!offsetPlans.some(plan=>boxesOverlap(box,plan.box)) && !guideBoxes.some(old=>boxesOverlap(box,old))){
+          tx=candidate; labelBox=box; break;
+        }
+      }
+      if(!labelBox){
+        const tip0=[PX(tx),PY(lineY(tx))];
+        labelBox=textBox(tip0[0]+ux*textStart,tip0[1]+uy*textStart,label,F_SML,'start',-g.th*180/Math.PI);
+      }
+      const tip=[PX(tx),PY(lineY(tx))];
+      const nx=-g.sin, ny=-g.cos;              // 点線より上側への法線
+      const triH=F_SML*.525;
+      const base=[tip[0]+nx*triH,tip[1]+ny*triH];
+      poly([tip,[base[0]-ux*triW,base[1]-uy*triW],[base[0]+ux*triW,base[1]+uy*triW]],0,'#000');
+      text(tip[0]+ux*textStart, tip[1]+uy*textStart,
+           label, F_SML, 'start', -g.th*180/Math.PI);
+      guideBoxes.push(labelBox);
+      occupiedTextBoxes.push(labelBox);
+    };
+    const sameHanaOffset = ['ref','dir','side','value'].every(k=>g.offsets.shimo[k]===g.offsets.kami[k]);
+    const splitHanaGuide = g.bS.poly && g.bK.poly && !sameHanaOffset;
+    // 鼻隠しラインは、両端の鼻隠しを少し超える長さまで引く。
+    const hanaGuideL = -g.tHana*0.3, hanaGuideR = g.totalW+g.tHana*0.3;
+    if(g.bS.poly && g.bK.poly && sameHanaOffset){
+      guide('鼻隠しライン', g.offsets.shimo.guideLine, hanaGuideL, hanaGuideR, g.totalW*.60, -1);
+    }else{
+      if(g.bK.poly) guide('水上鼻隠しライン', g.offsets.kami.guideLine, hanaGuideL, hanaGuideR, g.totalW*.68, -1);
+      if(g.bS.poly) guide('水下鼻隠しライン', g.offsets.shimo.guideLine, hanaGuideL, hanaGuideR, g.totalW*.12, +1);
+    }
+    // 破風板注記は鼻隠し注記との間隔を確保した位置へ置く。
+    if(g.hasHafu) guide('破風板ライン', g.lnHafu, g.totalW*0.12, g.totalW*0.90,
+                         g.totalW*.42, -1);
+  }
+
+  /* ---- 母屋（断面） ---- */
+  const M = g.moya;
+  poly([[PX(M.xL),PY(M.yT)],[PX(M.xR),PY(M.yT)],
+        [PX(M.xR),PY(M.yT+g.moyaSize)],[PX(M.xL),PY(M.yT+g.moyaSize)]],W_OUT);
+  if(p.dHatch && g.hasHafu){   // ケラバカットで落とす部分（カット位置より下）
+    const cut = clipBelow([[M.xL,M.yT],[M.xR,M.yT],[M.xR,M.yT+g.moyaSize],[M.xL,M.yT+g.moyaSize]], g.lnCut);
+    if(cut.length>2) poly(cut.map(q=>[PX(q[0]),PY(q[1])]), W_OUT, 'url(#hatch)');
+  }
+  line(PX(M.xNotch),PY(M.yT),PX(M.xNotch),PY(M.yT+g.moyaSize),W_OUT);   // 垂木欠きライン
+  if(p.dCenter) line(PX(M.xc),PY(M.yT)-2,PX(M.xc),PY(M.yT+g.moyaSize)+2,W_DIM,'6 1.6 1.2 1.6');
+
+  /* ---- 寸法 ---- */
+  // 鼻隠し見付（左右）※法線は下向き方向に対して左が正
+  const dim2=(a,b,off,label)=>{const A=P2(a),B=P2(b); dim(A[0],A[1],B[0],B[1],off,label);};
+  if(p.dHana) [[g.bS,1],[g.bK,-1]].forEach(([b,sg])=>{
+    if(!b.poly) return;
+    if(b.cut){                                   // 短い成・長い成・その差
+      dim2(b.short[0], b.short[1], sg*SIDE,       fmt(b.faceShort));
+      dim2(b.full [0], b.full [1], sg*(SIDE+EXTRA), fmt(b.face));
+      dim2(b.gap  [0], b.gap  [1], sg*SIDE*0.42,  fmt(g.tHana*g.tan));
+    } else {
+      dim2(b.outer[0], b.outer[1], sg*SIDE, fmt(b.face));
+    }
+  });
+  // 鼻隠し厚
+  if(p.dThick){
+    if(g.bS.poly) dim2(g.bS.thick[0], g.bS.thick[1], OFF, fmt(g.tHana));
+    if(g.bK.poly) dim2(g.bK.thick[0], g.bK.thick[1], OFF, fmt(g.tHana));
+  }
+  // 瓦：各部材の天端オフセット。基準線と方向が図面だけで分かるように明記する。
+  if(g.isTile) offsetPlans.forEach(plan=>
+    dim(plan.A[0],plan.A[1],plan.B[0],plan.B[1],plan.off,plan.label));
+  // 母屋まわり
+  if(p.dMoya  && g.hasHafu) dim(PX(M.xL),PY(M.yT), PX(M.xL),PY(g.lnCut(M.xL)),  OFF, fmt(g.dimMoya));
+  if(p.dShort && g.hasHafu) dim(PX(M.xR),PY(M.yT), PX(M.xR),PY(g.lnCut(M.xR)), -OFF, fmt(g.dimMoyaShort));
+  if(p.d225 && Math.abs(g.notchRef)>0.05)
+    dim(PX(M.xNotch),PY(M.yT), PX(M.xc),PY(M.yT), -OFF, fmt(g.notchRef));
+  if(p.dMoyaW)
+    dim(PX(M.xL),PY(M.yT+g.moyaSize), PX(M.xR),PY(M.yT+g.moyaSize), OFF, fmt(g.moyaSize));
+
+  // 破風板・垂木・合板の断面寸法（勾配直角方向）
+  const perp=(x,d,lineBase=g.lnD)=>[x+d*g.sin, lineBase(x)+d*g.cos];
+  const free = Math.max(40, g.L - M.xR);
+  if(p.dHafuW && g.hasHafu){          // 破風板寸法
+    const xa = M.xR + free*0.42;
+    const a1=[xa,g.lnHafu(xa)], a2=perp(xa,g.wHafu,g.lnHafu);
+    dim(PX(a1[0]),PY(a1[1]), PX(a2[0]),PY(a2[1]), 0, fmt(g.wHafu));
+  }
+  const xb = M.xR + free*0.78;
+  const q0=perp(xb,-g.tNoji), q1=[xb,g.lnD(xb)], q2=perp(xb,g.hTaruki);
+  if(p.dTaruki)                       // 垂木成
+    dim(PX(q1[0]),PY(q1[1]), PX(q2[0]),PY(q2[1]), 0, fmt(g.hTaruki));
+  if(p.dNoji)                         // 合板厚
+    dim(PX(q0[0]),PY(q0[1]), PX(q1[0]),PY(q1[1]), 0, fmt(g.tNoji));
+
+  // ケラバカットのクリアランス（破風板下端 → カット位置、直角方向）
+  if(p.dClear && g.hasHafu && g.clearance>0){
+    const xcl = M.xR + free*0.13;
+    const c1=perp(xcl, g.wHafu - g.clearance), c2=perp(xcl, g.wHafu);
+    dim(PX(c1[0]),PY(c1[1]), PX(c2[0]),PY(c2[1]), 0, fmt(g.clearance));
+  }
+
+  // 野地板の出（野地板下端が基準／野地板の上へ逃がす）
+  const ovOff = -(g.tNoji*k + F_DIM*1.5);
+  // マイナスのときは寸法線の向きが反転するので、逃がす側も合わせて反転させる
+  if(p.dOverS && g.capS && Math.abs(g.ovS) > 0.01)
+    dim(PX(g.endLD[0]),PY(g.endLD[1]),
+        PX(g.bS.innerX),PY(g.lnD(g.bS.innerX)),
+        g.ovS >= 0 ? ovOff : -ovOff, fmt(Math.abs(g.ovS)));
+  if(p.dOverK && g.capK && Math.abs(g.ovK) > 0.01)
+    dim(PX(g.bK.innerX),PY(g.lnD(g.bK.innerX)),
+        PX(g.endRD[0]),PY(g.endRD[1]),
+        g.ovK >= 0 ? ovOff : -ovOff, fmt(Math.abs(g.ovK)));
+
+
+  /* ---- 勾配マーク ---- */
+  if(p.dSlope){
+    const mk = Math.min(k, 20/Math.max(1e-6, 100*g.tan));
+    const run = 100*mk, rise = 100*g.tan*mk;
+    const mx = PX(0) + 12;
+    const clear = F_DIM*1.9 + ((p.dOverS && g.capS) ? F_DIM*1.6 : 0);
+    const myBase = Math.max(headB+F_DIM, PY(g.lnC((mx-ox+run)/k)) - clear - rise);
+    line(mx, myBase, mx+run, myBase, W_OUT);                 // 基準（100）
+    line(mx, myBase, mx, myBase+rise, W_OUT);                // 立上り
+    line(mx, myBase+rise, mx+run, myBase, W_OUT);            // 斜辺
+    text(mx+run/2, myBase-F_DIM*0.42, '100', F_DIM, 'middle');
+    text(mx-F_DIM*0.42, myBase+rise/2+F_DIM*0.36, fmt(g.pitch*10), F_DIM, 'end');
+  }
+
+  /* ---- 注記 ---- */
+
+  /* ---- 表題・注記ブロック ---- */
+  text(SW/2, yTitle, `${p.name||''}　屋根勾配：${(Number(g.pitch)).toFixed(1)}寸`, F_TTL, 'middle', 0, 700);
+  if(p.material) text(SW/2, yMat, `（${p.material}）`, F_MAT, 'middle');
+
+  noteLines.forEach((t,i)=>
+    text(SW/2, yNote2-(noteLines.length-1-i)*noteStep, t, F_NOTE, 'middle', 0, 700));
+
+  const notes = String(p.note||'').split(/\r?\n/).filter(s=>s.trim()!=='').slice(0,3);
+  notes.forEach((s,i)=> text(11, yNote2 - (notes.length-1-i)*(F_SML*1.35), s, F_SML, 'start'));
+
+  if(p.client) text(SW-11, yNote2, p.client, F_SML, 'end');
+
+  return o.join('\n');
+}
+
+/* =========================================================
+   3b. 破風鼻隠し発注書（A4縦）
+   ========================================================= */
+function orderRows(p, g){
+  // 発注書は整数のみ。C と D を丸めてから B = D + C とし、必ず合計が一致するようにする。
+  const rows = {p1:[], p2:[], p3:[]};
+  const RI = v => Math.round(v);
+  // 瓦は、鼻隠しの小数成も破風板と同じく切り上げて不足を防ぐ。
+  const orderInt = v => g.isTile ? Math.ceil(v-1e-9) : RI(v);
+  const putCut = (sec, sp, thick, seiShort, len, qty)=>{
+    const A = RI(thick), C = orderInt(thick*g.tan), D = orderInt(seiShort);
+    rows[sec].push({sp, A, B:D+C, C, D, len, qty});
+  };
+  const putFlat = (sp, thick, sei, len, qty)=>
+    rows.p3.push({sp, A:RI(thick), B:orderInt(sei), C:'', D:'', len, qty});
+
+  if(g.hasHafu && p.ordHafu!=='off'){
+    const sec = p.ordHafu || 'p3';
+    if(sec==='p3') putFlat(p.ordHafuSp, g.tHafu, g.hafuOrderW, p.ordHafuLen, p.ordHafuQty);
+    else           putCut(sec, p.ordHafuSp, g.tHafu, g.hafuOrderW, p.ordHafuLen, p.ordHafuQty);
+  }
+  [[g.bS, p.ordHanaSSp, p.ordHanaSLen, p.ordHanaSQty],
+   [g.bK, p.ordHanaKSp, p.ordHanaKLen, p.ordHanaKQty]].forEach(([b,sp,len,qty])=>{
+    if(b.mode==='none') return;
+    if(b.cut) putCut(b.cutBoth?'p1':'p2', sp, g.tHana, b.faceShort, len, qty);
+    else      putFlat(sp, g.tHana, b.face, len, qty);
+  });
+  return rows;
+}
+
+function renderOrderSVG(p){
+  const g = geometry(p);
+  const o = [];
+  const N  = v => Math.round(v*1000)/1000;
+  const FF = "font-family=\"'Yu Gothic UI','Meiryo','MS PGothic',sans-serif\"";
+  const T = (x,y,t,sz,an,w)=>{ if(t===''||t===null||t===undefined) return;
+    o.push(`<text x="${N(x)}" y="${N(y)}" font-size="${N(sz)}" text-anchor="${an||'start'}" ${FF} font-weight="${w||400}" fill="#000">${esc(t)}</text>`); };
+  const L = (x1,y1,x2,y2,w,dash)=>o.push(`<line x1="${N(x1)}" y1="${N(y1)}" x2="${N(x2)}" y2="${N(y2)}" stroke="#000" stroke-width="${w||0.25}"${dash?` stroke-dasharray="${dash}"`:''}/>`);
+  const PG= (pts,w)=>o.push(`<polygon points="${pts.map(q=>N(q[0])+','+N(q[1])).join(' ')}" fill="none" stroke="#000" stroke-width="${w||0.5}"/>`);
+  const AR= (x1,y1,x2,y2)=>{                       // 両矢印
+    L(x1,y1,x2,y2,0.25);
+    const dx=x2-x1, dy=y2-y1, l=Math.hypot(dx,dy); if(l<0.01) return;
+    const ux=dx/l, uy=dy/l, a=2.4, b=0.75;
+    [[x1,y1,ux,uy],[x2,y2,-ux,-uy]].forEach(([px,py,sx,sy])=>
+      o.push(`<polygon points="${N(px)},${N(py)} ${N(px+sx*a-sy*b)},${N(py+sy*a+sx*b)} ${N(px+sx*a+sy*b)},${N(py+sy*a-sx*b)}" fill="#000"/>`));
+  };
+
+  /* ---------- 説明図 ---------- */
+  const BW=16, BH=40, BD=7;                        // 板厚・成・勾配落ち（作図上の見た目）
+  function diagram(kind, dx, dy){
+    const x2=dx+BW, yb=dy+BD+BH;
+    const dot=(y)=>L(dx-15, y, x2+18, y, 0.18, '1.6 1.2');
+    if(kind==='p1'){                               // 上下勾配：平行四辺形
+      PG([[dx,dy],[x2,dy+BD],[x2,yb],[dx,dy+BH]]);
+      [dy, dy+BD, dy+BH, yb].forEach(dot);
+      AR(dx-10, dy,    dx-10, yb);      T(dx-13,  dy+(BD+BH)/2+1.8, 'B', 5.0, 'end');
+      AR(x2+13, dy+BD, x2+13, yb);      T(x2+16,  dy+(BD+BH)/2+1.8, 'D', 5.0);
+      AR(x2+5,  dy,    x2+5,  dy+BD);   T(x2+7.5, dy+BD/2+1.8,      'C', 4.6);
+      AR(dx-4,  dy+BH, dx-4,  yb);      T(dx-6.5, dy+BH+BD/2+1.8,   'C', 4.6, 'end');
+    } else if(kind==='p2'){                        // 一方のみ：台形
+      PG([[dx,dy],[x2,dy+BD],[x2,yb],[dx,yb]]);
+      [dy, dy+BD, yb].forEach(dot);
+      AR(dx-10, dy,    dx-10, yb);      T(dx-13,  dy+(BD+BH)/2+1.8, 'B', 5.0, 'end');
+      AR(x2+13, dy+BD, x2+13, yb);      T(x2+16,  dy+(BD+BH)/2+1.8, 'D', 5.0);
+      AR(x2+5,  dy,    x2+5,  dy+BD);   T(x2+7.5, dy+BD/2+1.8,      'C', 4.6);
+    } else {                                       // 仕上げ・粗寸法：矩形
+      PG([[dx,dy],[x2,dy],[x2,yb],[dx,yb]]);
+      [dy, yb].forEach(dot);
+      AR(dx-10, dy, dx-10, yb);         T(dx-13,  dy+(BD+BH)/2+1.8, 'B', 5.0, 'end');
+    }
+    AR(dx, yb+9, x2, yb+9);             T(dx+BW/2, yb+15, 'A', 5.0, 'middle');
+  }
+
+  /* ---------- 表 ---------- */
+  function table(cols, heads, list, hb){
+    const RH=11, nrow=4;
+    heads.forEach((h,i)=> T((cols[i]+cols[i+1])/2, hb, h, 4.2, 'middle', 700));
+    L(cols[0], hb+2.6, cols[cols.length-1], hb+2.6, 0.5);
+    for(let r=0;r<nrow;r++){
+      const it=list[r], base=hb+2.6+RH*(r+1);
+      if(it){
+        const v = (cols.length===8)
+          ? [it.sp, it.A+'×', it.B, it.C, it.D, it.len, it.qty]
+          : [it.sp, it.A+'×', it.B, it.len, it.qty];
+        v.forEach((t,i)=> T((cols[i]+cols[i+1])/2, base-3.6, (t===''||t===undefined)?'':String(t), 4.8, 'middle'));
+      }
+      L(cols[0], base, cols[cols.length-1], base, 0.2);
+    }
+  }
+
+  const C7 = [84,104,122,140,156,174,186,198];     // 樹種 A B C D 材長 枚数
+  const C5 = [84,110,134,158,178,198];             // 樹種 A B 材長 枚数
+  const rows = orderRows(p, g);
+  const SEC = [
+    {k:'p1', t:'①　上下勾配加工',                        y: 20},
+    {k:'p2', t:'②　一方のみ勾配加工',                    y:112},
+    {k:'p3', t:'③　仕上げ寸法（ﾌﾟﾚｰﾅｰ加工有）・粗寸法',  y:204}
+  ];
+  SEC.forEach(sc=>{
+    L(12, sc.y-7, 198, sc.y-7, 0.7);
+    T(14, sc.y, sc.t, 5.4, 'start', 700);
+    diagram(sc.k, 40, sc.y+13);
+    if(sc.k==='p3') table(C5, ['樹種','A','B','材長','枚数'], rows.p3, sc.y+17);
+    else            table(C7, ['樹種','A','B','C','D','材長','枚数'], rows[sc.k], sc.y+17);
+  });
+  L(12, 285, 198, 285, 0.7);
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 210 297" width="210mm" height="297mm" `
+    + `shape-rendering="geometricPrecision"><rect width="210" height="297" fill="#fff"/>`
+    + o.join('\n') + `</svg>`;
+}
+
+function renderSVG(p){
+  const g = geometry(p);
+  const inner = buildContent(p, g);
+  const portrait = (p.orient==='portrait');
+  const pw = portrait?210:297, ph = portrait?297:210;
+  const wrap = portrait ? `<g transform="matrix(0,1,-1,0,210,0)">${inner}</g>` : inner;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${pw} ${ph}" `
+    + `width="${pw}mm" height="${ph}mm" shape-rendering="geometricPrecision">`
+    + `<defs><pattern id="hatch" width="2.6" height="2.6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">`
+    + `<line x1="0" y1="0" x2="0" y2="2.6" stroke="#000" stroke-width="0.16"/></pattern></defs>`
+    + `<rect width="${pw}" height="${ph}" fill="#fff"/>`
+    + wrap + `</svg>`;
+}
+
+/* =========================================================
+   4. UI
+   ========================================================= */
+const $ = id => document.getElementById(id);
+
+function getParams(){ return Object.assign({}, DEFAULTS, readForm(), {roofMode:activeMode}); }
+
+// 部材寸法は「巾×成」で見せるが、既存の計算・保存形式は維持する。
+// 鼻隠しの巾は水上・水下で共通のため、どちらを編集しても同じ値へ連動させる。
+function syncMaterialInputs(p,g){
+  const set = (id,v)=>{
+    const el=$(id);
+    if(el && document.activeElement!==el) el.value=(v===null||v===undefined) ? '' : fmt(v);
+  };
+  set('normalHafuWidth', p.tHafu);
+  set('normalHafuHeight', g.wHafu);
+  set('normalHanaKamiWidth', p.tHana);
+  set('normalHanaShimoWidth', p.tHana);
+  set('normalHanaKamiHeight', g.hHanaOrderK);
+  set('normalHanaShimoHeight', g.hHanaOrderS);
+
+  set('tileHanaShimoWidth', p.tHana);
+  set('tileHanaShimoHeight', g.hHanaOrderS);
+  set('tileHafuWidth', p.tHafu);
+  set('tileHafuHeight', g.wHafu);
+  set('tileHanaKamiWidth', p.tHana);
+  set('tileHanaKamiHeight', g.hHanaOrderK);
+
+  document.querySelectorAll('[data-fixed-for]').forEach(el=>{
+    const fixed=$(el.dataset.fixedFor);
+    if(fixed) el.checked=fixed.checked;
+  });
+}
+
+// 使わない部材の寸法欄は入力できないようにする
+function updateEnabled(p){
+  const off = (id, disabled)=>{
+    const el = $(id);
+    if(!el) return;
+    el.disabled = disabled;
+    const row = el.closest('.row');
+    if(row) row.classList.toggle('off', disabled);
+  };
+  off('normalHanaKamiWidth', p.hanaKami==='none');
+  off('normalHanaKamiHeight', p.hanaKami==='none');
+  off('normalHanaShimoWidth', p.hanaShimo==='none');
+  off('normalHanaShimoHeight', p.hanaShimo==='none');
+  off('tileHanaKamiWidth', p.hanaKami==='none');
+  off('tileHanaKamiHeight', p.hanaKami==='none');
+  off('tileHanaShimoWidth', p.hanaShimo==='none');
+  off('tileHanaShimoHeight', p.hanaShimo==='none');
+  const noHafu = (p.hafu === 'none');
+  off('normalHafuWidth', noHafu);
+  off('normalHafuHeight', noHafu);
+  off('tileHafuWidth', noHafu);
+  off('tileHafuHeight', noHafu);
+  off('clearance', noHafu);          // 破風板が無ければケラバカットも無い
+
+  if(p.roofMode==='tile'){
+    [['hafu', noHafu], ['hanaShimo', p.hanaShimo==='none'], ['hanaKami', p.hanaKami==='none']].forEach(([part, disabled])=>{
+      document.querySelectorAll(`[data-offset-part="${part}"] select, [data-offset-part="${part}"] input`).forEach(el=>el.disabled=disabled);
+      const group = document.querySelector(`[data-offset-part="${part}"]`);
+      if(group) group.classList.toggle('off', disabled);
+    });
+  }
+  const unavailable={fixHafu:noHafu, fixHanaShimo:p.hanaShimo==='none', fixHanaKami:p.hanaKami==='none'};
+  document.querySelectorAll('[data-fixed-for]').forEach(el=>el.disabled=unavailable[el.dataset.fixedFor]);
+}
+
+// 固定された成が計算の基準になる。基準不足と、下端揃えから外れる固定値を知らせる。
+function getPrintWarnings(p,g){
+  const parts=[
+    {active:p.hafu!=='none', fixed:p.fixHafu, value:p.wHafu, name:'破風板'},
+    {active:p.hanaShimo!=='none', fixed:p.fixHanaShimo, value:p.hHanaShimoOrder, name:'水下鼻隠し', auto:g.faceAutoS},
+    {active:p.hanaKami!=='none', fixed:p.fixHanaKami, value:p.hHanaKamiOrder, name:'水上鼻隠し', auto:g.faceAutoK}
+  ];
+  const messages=[];
+  const active=parts.filter(part=>part.active);
+  const valid=part=>Number.isFinite(part.value) && part.value>=10;
+  if(!active.length) messages.push('破風板と鼻隠しがすべて「無し」です。部材の有無を確認してください。');
+  active.filter(part=>part.fixed && !valid(part)).forEach(part=>{
+    messages.push(`${part.name}の固定する成を10 mm以上で入力してください。`);
+  });
+  if(active.length && !active.some(part=>part.fixed && valid(part))){
+    messages.push('計算の基準がありません。破風板または鼻隠しの成を1つ以上「固定」にしてください。');
+  }
+  // 発注寸法の整数丸めで生じる差は許容し、1 mmを超える食い違いだけ警告する。
+  for(const part of active){
+    if(part.auto===undefined || !part.fixed || !valid(part)) continue;
+    if(Math.abs(part.value-part.auto)>1+1e-9){
+      messages.push(`${part.name}の固定成 ${fmt(part.value)} mm は、下端揃えの計算値 ${fmt(part.auto)} mm と一致しません。`);
+    }
+  }
+  return messages;
+}
+
+function updatePrintWarning(p,g){
+  const messages=getPrintWarnings(p,g);
+  const box=$('printWarning');
+  box.classList.toggle('is-visible', messages.length>0);
+  $('printWarningList').innerHTML=messages.map(message=>`<li>${esc(message)}</li>`).join('');
+  if(!messages.length) $('ackWarning').checked=false;
+  const blocked=messages.length>0 && !$('ackWarning').checked;
+  ['btnPrintDwg','btnPrintOrd','btnPrintBoth'].forEach(id=>$(id).disabled=blocked);
+}
+
+function refresh(){
+  const p = getParams();
+  const g = geometry(p);
+  // 未固定の破風板は、固定された鼻隠しに合わせた逆算値を入力欄にも戻す。
+  if(!p.fixHafu) $('wHafu').value = Math.round(g.wHafu*10)/10;
+  syncMaterialInputs(p,g);
+  updateEnabled(p);
+  updatePrintWarning(p,g);
+  $('sheet').innerHTML = renderSVG(p);
+  $('sheet').className = 'sheet ' + (p.orient==='portrait' ? 'port' : 'land');
+  $('sheetOrd').innerHTML = renderOrderSVG(p);
+  $('pgLabel').textContent = 'ケラバ図 A4横　＋　発注書 A4縦';
+  applyZoom();
+  saveCurrentForm();
+}
+
+function applyZoom(){
+  const stage=$('stage'), px = mm => mm*96/25.4, sel = $('zoom').value;
+  [['wrap','sheet'],['wrapOrd','sheetOrd']].forEach(([wid,sid])=>{
+    const wrap=$(wid), sheet=$(sid);
+    if(!wrap||!sheet) return;
+    const svg = sheet.querySelector('svg');
+    if(!svg) return;
+    const wmm = parseFloat(svg.getAttribute('width')), hmm = parseFloat(svg.getAttribute('height'));
+    let z = (sel==='fit')
+      ? Math.min((stage.clientWidth-70)/px(wmm), (stage.clientHeight-70)/px(hmm), 1)
+      : parseFloat(sel);
+    z = Math.max(.15, z);
+    sheet.style.transform = `scale(${z})`;
+    sheet.style.width  = px(wmm)+'px';
+    sheet.style.height = px(hmm)+'px';
+    wrap.style.width   = (px(wmm)*z)+'px';
+    wrap.style.height  = (px(hmm)*z)+'px';
+  });
+}
+
+/* ---- イベント ---- */
+// 数値欄の上でホイールを回したり上下キーを押しても値を変えない。
+// 代わりに入力エリア全体をスクロールさせる。
+(function(){
+  const isNum = t => t && t.tagName==='INPUT' && t.type==='number';
+  const box = $('form');
+  box.addEventListener('wheel', e=>{
+    if(!isNum(e.target)) return;              // 数値欄の上だけ横取りする
+    e.preventDefault();
+    const unit = e.deltaMode===1 ? 16 : (e.deltaMode===2 ? box.clientHeight : 1);
+    box.scrollTop += e.deltaY * unit;
+  }, {passive:false});
+  box.addEventListener('keydown', e=>{
+    if(!isNum(e.target)) return;
+    if(e.key!=='ArrowUp' && e.key!=='ArrowDown') return;
+    e.preventDefault();
+    box.scrollTop += (e.key==='ArrowDown' ? 48 : -48);
+  });
+})();
+
+// 入力欄をクリック（またはTabで移動）したら中身を全選択して、すぐ打ち直せるようにする
+(function(){
+  const target = t => t && t.tagName==='INPUT' && (t.type==='number' || t.type==='text');
+  const box = $('form');
+  let pointerScroll = null;
+  box.addEventListener('pointerdown', e=>{
+    pointerScroll = null;
+    if(!target(e.target)) return;
+    const inputRect=e.target.getBoundingClientRect(), boxRect=box.getBoundingClientRect();
+    if(inputRect.top>=boxRect.top && inputRect.bottom<=boxRect.bottom)
+      pointerScroll={element:e.target, top:box.scrollTop};
+  });
+  box.addEventListener('focusin', e=>{
+    if(!target(e.target)) return;
+    e.target.select();
+    e.target._selectOnClick = true;
+    // 見えている入力欄をクリックしただけで、選択処理が一覧を動かさないようにする。
+    if(pointerScroll && pointerScroll.element===e.target){
+      const top=pointerScroll.top;
+      box.scrollTop=top;
+      requestAnimationFrame(()=>{ if(document.activeElement===e.target) box.scrollTop=top; });
+    }
+    pointerScroll=null;
+  });
+  // フォーカス直後の mouseup はカーソル位置を決めて選択を解除してしまうので抑える
+  box.addEventListener('mouseup', e=>{
+    if(e.target && e.target._selectOnClick){ e.preventDefault(); e.target._selectOnClick = false; }
+  }, true);
+  box.addEventListener('focusout', e=>{
+    if(e.target) e.target._selectOnClick = false;
+  }, true);
+})();
+
+$('form').addEventListener('input', e=>{
+  const source=e.target, target=source && source.dataset && source.dataset.materialFor;
+  if(target && !source.readOnly){
+    const canonical=$(target);
+    if(canonical) canonical.value=source.value;
+    // 成を直接入力した場合は、その部材を固定して図面へ反映する。
+    const fixedByHeight={wHafu:'fixHafu',hHanaShimoOrder:'fixHanaShimo',hHanaKamiOrder:'fixHanaKami'};
+    if(source.value!=='' && fixedByHeight[target]) $(fixedByHeight[target]).checked=true;
+  }
+  const fixedFor=source && source.dataset && source.dataset.fixedFor;
+  if(fixedFor){
+    const canonical=$(fixedFor);
+    if(canonical) canonical.checked=source.checked;
+    // 自動計算済みの表示値を固定する場合も、隠し入力へ値を確定させる。
+    if(source.checked){
+      const heightByFixed={fixHafu:'wHafu',fixHanaShimo:'hHanaShimoOrder',fixHanaKami:'hHanaKamiOrder'};
+      const height=source.closest('.material-row').querySelector(`[data-material-for="${heightByFixed[fixedFor]}"]`);
+      if(height) $(heightByFixed[fixedFor]).value=height.value;
+    }
+  }
+});
+
+$('form').addEventListener('input', ()=>{ $('ackWarning').checked=false; refresh(); });
+$('form').addEventListener('change', ()=>{ $('ackWarning').checked=false; refresh(); });
+$('ackWarning').addEventListener('change', refresh);
+$('zoom').addEventListener('change', applyZoom);
+window.addEventListener('resize', applyZoom);
+
+// 用紙の向きは印刷するものだけを宣言する。
+// 横と縦の両方を常に書いておくと、1枚しか出さないときでも Chrome が
+// 「向きが混在した文書」と判断して、印刷プレビューのレイアウト選択が壊れる。
+const PAGE_CSS = {
+  dwg : '@page{size:A4 landscape;margin:0}',
+  ord : '@page{size:A4 portrait;margin:0}',
+  both: '@page{margin:0}'
+      + '@page pgL{size:A4 landscape;margin:0}'
+      + '@page pgP{size:A4 portrait;margin:0}'
+      + '.sheet.land{page:pgL}.sheet.port{page:pgP}'
+};
+function setPrintMode(mode){
+  document.body.classList.remove('p-dwg','p-ord','p-both');
+  document.body.classList.add('p-'+mode);
+  $('pageStyle').textContent = PAGE_CSS[mode];
+}
+function doPrint(mode){                    // 'dwg' | 'ord' | 'both'
+  const p=getParams();
+  if(getPrintWarnings(p,geometry(p)).length && !$('ackWarning').checked) return;
+  setPrintMode(mode);
+  // 差し替えたスタイルが反映されてから印刷ダイアログを開く
+  requestAnimationFrame(()=> requestAnimationFrame(()=> window.print()));
+}
+$('btnPrintDwg').onclick  = ()=> doPrint('dwg');
+$('btnPrintOrd').onclick  = ()=> doPrint('ord');
+$('btnPrintBoth').onclick = ()=> doPrint('both');
+
+function selectMode(mode){
+  if(mode===activeMode) return;
+  saveCurrentForm();
+  activeMode = mode;
+  $('ackWarning').checked=false;
+  document.body.classList.toggle('tile-mode', mode==='tile');
+  writeForm(loadSavedForm(mode));
+  $('tabNormal').classList.toggle('is-active', mode==='normal');
+  $('tabTile').classList.toggle('is-active', mode==='tile');
+  $('tabNormal').setAttribute('aria-selected', String(mode==='normal'));
+  $('tabTile').setAttribute('aria-selected', String(mode==='tile'));
+  refresh();
+}
+
+$('tabNormal').onclick = ()=> selectMode('normal');
+$('tabTile').onclick = ()=> selectMode('tile');
+
+$('btnReset').onclick = ()=>{
+  if(!confirm('入力を既定値に戻します。よろしいですか？')) return;
+  try{ localStorage.removeItem(STORAGE_KEYS[activeMode]); }catch(e){}
+  $('ackWarning').checked=false;
+  writeForm(loadSavedForm(activeMode));
+  refresh();
+};
+
+/* ---- 起動 ---- */
+(function init(){
+  let ok=true;
+  try{
+    localStorage.setItem('keraba_probe','1'); localStorage.removeItem('keraba_probe');
+  }catch(e){ ok=false; }
+  document.body.classList.toggle('tile-mode', activeMode==='tile');
+  writeForm(loadSavedForm(activeMode));
+  refresh();
+  setPrintMode('both');
+  if(!ok){
+    const b=document.getElementById('updBar');
+    b.style.background='#ffe6e6'; b.style.borderColor='#e0a0a0'; b.style.color='#8a2020';
+    b.textContent='このブラウザでは入力内容を保存できません（サーバー経由で開いてください）';
+    b.style.display='block';
+  }
+})();
+
+/* =========================================================
+   5. PWA（オフライン動作と自動更新）
+   ========================================================= */
+// 統合版の更新・オフライン保存は、入口のService Workerへ一本化する。
+const INTEGRATED_BUILD = true;
+const APP_VERSION = '1.0.20';
+document.getElementById('ver').textContent = '統合版';
+
+if(!INTEGRATED_BUILD && 'serviceWorker' in navigator && location.protocol.startsWith('http')){
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', ()=>{
+    if(reloading) return; reloading = true; location.reload();
+  });
+  navigator.serviceWorker.register('./sw.js').then(reg=>{
+    reg.addEventListener('updatefound', ()=>{
+      const sw = reg.installing;
+      if(!sw) return;
+      sw.addEventListener('statechange', ()=>{
+        if(sw.state==='installed' && navigator.serviceWorker.controller){
+          const bar = document.getElementById('updBar');
+          bar.style.display = 'block';
+          bar.onclick = ()=> location.reload();
+        }
+      });
+    });
+    setInterval(()=> reg.update(), 10*60*1000);
+  }).catch(()=>{});
+}
+
+/* Service Worker が使えない環境（社内LANのhttpなど）でも自動更新する。
+   version.json を定期的に見に行き、番号が変わっていたら読み直す。
+   入力内容は都度保存しているので、読み直しても続きから使えます。 */
+let updating = false;
+function applyUpdate(v){
+  if(updating) return;
+  updating = true;
+  const bar = document.getElementById('updBar');
+  const go  = ()=> {
+    try{ sessionStorage.setItem('keraba_reloaded_for', v); }catch(e){}
+    location.replace(location.pathname + '?v=' + encodeURIComponent(v));
+  };
+  // 一度読み直しても版が変わらないとき（version.json と本体の番号がずれている等）は、
+  // 読み直しを繰り返さずバナーだけ出す
+  let tried = null;
+  try{ tried = sessionStorage.getItem('keraba_reloaded_for'); }catch(e){}
+  if(tried === v){
+    bar.textContent = '更新に失敗しています。版番号が合っていません（表示中 v' + APP_VERSION + ' / 配信 v' + v + '）';
+    bar.style.display = 'block';
+    bar.onclick = go;
+    return;
+  }
+  bar.textContent = '新しいバージョン（v' + v + '）に更新します…';
+  bar.style.display = 'block';
+  bar.onclick = go;
+  setTimeout(go, 4000);
+}
+async function checkUpdate(){
+  if(INTEGRATED_BUILD || updating || !location.protocol.startsWith('http')) return;
+  try{
+    const r = await fetch('./version.json?_=' + Date.now(), {cache:'no-store'});
+    if(!r.ok) return;
+    const j = await r.json();
+    if(j && j.version && j.version !== APP_VERSION) applyUpdate(j.version);
+  }catch(e){}
+}
+checkUpdate();
+setInterval(checkUpdate, 3*60*1000);
+window.addEventListener('focus', checkUpdate);
+</script>
+</body>
+</html>

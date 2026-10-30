@@ -9,7 +9,7 @@ const calc = require("../js/calculator.js"),
 const data = require("../data/defaults.json");
 const root = path.resolve(__dirname, "..");
 const out = path.join(__dirname, "domain-output");
-const url = pathToFileURL(path.join(root, "index.html")).href;
+const url = pathToFileURL(path.join(root, "bolt.html")).href;
 const savedKey = "bolt-effective-length.saved.v1",
   workspaceKey = "bolt-effective-length.workspace.v1";
 function model(type = "double", effective = null) {
