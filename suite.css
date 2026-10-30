@@ -1,0 +1,26 @@
+:root { color-scheme: light; font-family: "Yu Gothic UI", "Meiryo", sans-serif; color: #172e32; background: #f4f7f8; }
+* { box-sizing: border-box; }
+html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { display: flex; flex-direction: column; }
+.suite-header { flex: none; display: flex; align-items: center; gap: 24px; padding: 10px 20px; background: #fff; border-bottom: 1px solid #cbd9da; }
+.suite-name { font-size: 16px; font-weight: 700; white-space: nowrap; }
+.suite-tabs { display: flex; gap: 8px; width: min(100%, 680px); }
+.suite-tabs button { flex: 1; min-width: 0; min-height: 48px; padding: 10px 14px; border: 1px solid #c1d0d2; border-radius: 8px; font: inherit; font-size: 18px; font-weight: 700; color: #29484e; background: #f6f9f9; cursor: pointer; }
+.suite-tabs button[aria-selected="true"] { color: #fff; background: #087f76; border-color: #087f76; }
+.suite-tabs button:hover { border-color: #087f76; }
+.suite-tabs button:focus-visible { outline: 3px solid #e09821; outline-offset: 2px; }
+.suite-workspace { position: relative; flex: 1; min-height: 0; }
+.suite-panel { position: absolute; inset: 0; }
+/* 非表示の画面も寸法を保ち、切替時の再描画や入力の消失を防ぐ。 */
+.suite-panel[aria-hidden="true"] { visibility: hidden; pointer-events: none; }
+.suite-panel iframe { display: block; width: 100%; height: 100%; border: 0; background: #fff; }
+noscript { padding: 16px; }
+@media (max-width: 700px) {
+  .suite-header { padding: 8px; gap: 0; }
+  .suite-name { display: none; }
+  .suite-tabs { width: 100%; gap: 6px; }
+  .suite-tabs button { padding: 8px 4px; font-size: 16px; }
+}
+@media print {
+  .suite-header { display: none; }
+}

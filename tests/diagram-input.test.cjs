@@ -12,7 +12,7 @@ function setup(t, workspace = null, width = 1280, visualViewport = null) {
   virtualConsole.on("jsdomError", (error) => errors.push(error.message));
   // 実ブラウザへの接続は行わず、DOM上でアプリのイベントと保存処理を検証する。
   const dom = new JSDOM(
-    fs.readFileSync(path.join(root, "index.html"), "utf8"),
+    fs.readFileSync(path.join(root, "bolt.html"), "utf8"),
     {
       url: "https://isolated-dom.test/",
       runScripts: "outside-only",

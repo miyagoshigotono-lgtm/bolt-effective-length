@@ -10,7 +10,7 @@
   "scripts": {
     "build": "node scripts/build-site.cjs",
     "check": "node scripts/check.cjs",
-    "test": "node --test tests/calculator.test.cjs tests/allowance-policy.test.cjs tests/nut-engagement.test.cjs tests/diagram-input.test.cjs tests/depth-render.test.cjs tests/diagram-render.test.cjs tests/head-render.test.cjs tests/engagement-render.test.cjs tests/site-assets.test.cjs tests/site-build.test.cjs"
+    "test": "node --test tests/calculator.test.cjs tests/allowance-policy.test.cjs tests/nut-engagement.test.cjs tests/diagram-input.test.cjs tests/depth-render.test.cjs tests/diagram-render.test.cjs tests/head-render.test.cjs tests/engagement-render.test.cjs tests/site-assets.test.cjs tests/site-build.test.cjs tests/suite.test.cjs"
   },
   "devDependencies": {
     "jsdom": "26.1.0",

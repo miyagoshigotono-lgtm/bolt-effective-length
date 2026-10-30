@@ -3,24 +3,7 @@ const path = require("node:path");
 
 const root = path.resolve(__dirname, "..");
 const output = path.join(root, "dist");
-const assets = [
-  "index.html",
-  "styles.css",
-  "js/defaults.js",
-  "js/calculator.js",
-  "js/drawing.js",
-  "js/app.js",
-  "data/defaults.json",
-  "vendor/lucide.min.js",
-  "vendor/lucide-LICENSE.txt",
-  "通常の有効長初期値.pdf",
-  "サンプル.pdf",
-  "有効長を見るための座金やナットなど.pdf",
-  "サンプル２.png",
-  "ダウンロード.png",
-  "CAD画面の断面図.png",
-  "仕様.md",
-];
+const assets = require("../js/site-assets.js");
 
 function buildSite() {
   // 出力先を作業フォルダ直下に固定し、リンク先や原本を削除しない。

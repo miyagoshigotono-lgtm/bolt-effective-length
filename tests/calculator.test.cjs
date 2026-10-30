@@ -328,7 +328,7 @@ test("ボルト深さは全ての穴の組合せで使い、材料の内部・0.
     }
 });
 test("入力欄はボルト深さ1つ、旧穴深さ・別の芯深さ欄はない", () => {
-  const html = fs.readFileSync(require.resolve("../index.html"), "utf8");
+  const html = fs.readFileSync(require.resolve("../bolt.html"), "utf8");
   assert.equal((html.match(/id="boltDepth"/g) || []).length, 1);
   assert.ok(html.includes("ボルト深さ<span"));
   assert.ok(!/id="(?:boxDepth|axisDepth|box-fields)"/.test(html));

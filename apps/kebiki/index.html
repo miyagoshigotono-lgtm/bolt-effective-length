@@ -1,0 +1,149 @@
+
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>垂木けびき線</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+.bg {
+  background:
+    linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px),
+    linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px);
+  background-size: 25px 25px;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 2rem 1rem;
+  font-family: "Segoe UI", sans-serif;
+}
+.calculator {
+  width: 320px;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 20px;
+  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+}
+h2 {
+  margin: 0 0 16px 0;
+  text-align: center;
+  color: #333;
+  font-size: 18px;
+  font-weight: bold;
+}
+.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 4px; }
+.field { display: flex; flex-direction: column; margin-bottom: 14px; }
+.field label { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 4px; }
+.field input, .field select {
+  padding: 8px;
+  font-size: 16px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+  width: 100%;
+}
+.results { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
+.result {
+  background: #f4f9ff;
+  border-left: 6px solid #4da3ff;
+  padding: 10px;
+  border-radius: 8px;
+}
+.result .title { font-weight: bold; color: #1e70bf; font-size: 14px; }
+.result .value { font-size: 22px; margin-top: 5px; color: #333; }
+</style>
+</head>
+<body>
+
+<div class="bg">
+  <div class="calculator">
+    <h2>ケビキ線電卓</h2>
+
+    <div class="row">
+      <div class="field">
+        <label for="keta">桁寸</label>
+        <select id="keta">
+          <option value="105">105角</option>
+          <option value="90">90角</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="taruki">垂木成（mm）</label>
+        <input type="number" id="taruki" value="60" min="0" max="100">
+      </div>
+    </div>
+
+    <div class="row">
+      <div class="field">
+        <label for="kobai">勾配（寸）</label>
+        <select id="kobai"></select>
+      </div>
+      <div class="field">
+        <label for="noki">軒の出（mm）</label>
+        <input type="number" id="noki" value="455" min="0">
+      </div>
+    </div>
+
+    <div class="results">
+      <div class="result">
+        <div class="title">タツ</div>
+        <div class="value" id="kane">—</div>
+      </div>
+      <div class="result">
+        <div class="title">カネ</div>
+        <div class="value" id="tatsu">—</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const kobaiSel = document.getElementById("kobai");
+for (let v = 0.5; v <= 9.0; v = Math.round((v + 0.5) * 10) / 10) {
+  const o = document.createElement("option");
+  o.value = v;
+  o.textContent = v.toFixed(1);
+  if (Math.abs(v - 1.0) < 0.01) o.selected = true;
+  kobaiSel.appendChild(o);
+}
+function calc() {
+  const keta = parseFloat(document.getElementById("keta").value);
+  const C = parseFloat(kobaiSel.value) / 10;
+  const D = parseFloat(document.getElementById("noki").value);
+  const T = parseFloat(document.getElementById("taruki").value);
+  if (isNaN(D) || isNaN(T)) {
+    document.getElementById("kane").textContent = "—";
+    document.getElementById("tatsu").textContent = "—";
+    return;
+  }
+  const horiz = D - keta / 2;
+  const base = Math.sqrt(horiz ** 2 + (horiz * C) ** 2);
+  document.getElementById("kane").textContent = base.toFixed(1);
+  document.getElementById("tatsu").textContent = (base - T * C).toFixed(1);
+}
+// 計算式とタツ・カネの表示先は原版のまま、入力だけを専用キーへ保存する。
+const savedFields = ["keta","kobai","noki","taruki"];
+const storageKey = "kebiki-line.input.v1";
+try {
+  const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
+  if (saved && typeof saved === "object") {
+    for (const id of savedFields) {
+      if (typeof saved[id] !== "string" || saved[id].length > 64) continue;
+      const field = document.getElementById(id);
+      if (field.tagName === "SELECT" && !Array.from(field.options).some(option => option.value === saved[id])) continue;
+      field.value = saved[id];
+    }
+  }
+} catch { /* 保存の不具合で計算を止めない。 */ }
+savedFields.forEach(id => document.getElementById(id).addEventListener("input", () => {
+  calc();
+  try {
+    const values = Object.fromEntries(savedFields.map(key => [key, document.getElementById(key).value]));
+    localStorage.setItem(storageKey, JSON.stringify(values));
+  } catch { /* 入力中の値はそのまま保つ。 */ }
+}));
+calc();
+</script>
+</body>
+</html>
