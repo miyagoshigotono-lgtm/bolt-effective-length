@@ -41,7 +41,7 @@
   }
   window.addEventListener("hashchange", () => activate(location.hash.slice(1)));
   const requested = location.hash.slice(1);
-  const initial = ids.includes(requested) ? requested : ids.includes(storedApp()) ? storedApp() : "bolt";
+  const initial = ids.includes(requested) ? requested : ids.includes(storedApp()) ? storedApp() : "keraba";
   activate(initial);
   // 旧ボルト画面への寸法・結果リンクも、同じ画面内へ引き継ぐ。
   if (["result-section", "dimension-details"].includes(requested)) {
