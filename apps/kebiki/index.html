@@ -5,97 +5,129 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>垂木けびき線</title>
+<meta name="theme-color" content="#124680">
 <style>
-* { box-sizing: border-box; margin: 0; padding: 0; }
-.bg {
-  background:
-    linear-gradient(90deg, rgba(0,0,0,0.05) 1px, transparent 1px),
-    linear-gradient(rgba(0,0,0,0.05) 1px, transparent 1px);
-  background-size: 25px 25px;
-  min-height: 100vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 2rem 1rem;
-  font-family: "Segoe UI", sans-serif;
+:root {
+  --bg:#eef1f5; --panel:#fff; --line:#d5dce5; --ink:#1c2430;
+  --sub:#5b6878; --accent:#1b6fd4; --accent2:#124680;
 }
-.calculator {
-  width: 320px;
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px;
-  box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+* { box-sizing:border-box; }
+html, body { margin:0; padding:0; height:100%; }
+body {
+  background:var(--bg); color:var(--ink);
+  font-family:"Yu Gothic UI","Meiryo","Hiragino Kaku Gothic ProN","MS PGothic",sans-serif;
+  font-size:13px;
 }
-h2 {
-  margin: 0 0 16px 0;
-  text-align: center;
-  color: #333;
-  font-size: 18px;
-  font-weight: bold;
+.app { display:flex; height:100vh; height:100dvh; overflow:hidden; }
+.side { width:525px; min-width:525px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
+.side header { padding:15px 18px 13px; border-bottom:1px solid var(--line); }
+h1 { margin:0; font-size:21px; letter-spacing:.04em; }
+.scroll { flex:1; overflow-y:auto; overflow-x:hidden; padding:18px; }
+fieldset { min-inline-size:0; min-width:0; margin:0 0 18px; padding:13px 16px 16px; border:1px solid var(--line); border-radius:6px; }
+legend { padding:0 8px; font-size:17px; font-weight:700; color:var(--accent2); letter-spacing:.06em; }
+.row { display:flex; align-items:center; gap:9px; min-width:0; margin:9px 0; }
+.row label { flex:0 0 203px; font-size:18px; font-weight:600; }
+input, select { flex:1 1 0; min-width:0; width:0; padding:7px 9px; border:1px solid var(--line); border-radius:5px; background:#fbfcfe; color:var(--ink); font:inherit; font-size:18px; }
+input { text-align:right; }
+input:focus, select:focus { outline:2px solid #bcd8f7; border-color:var(--accent); }
+.unit { flex:0 0 36px; font-size:16px; }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
+.main { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
+.toolbar { display:flex; justify-content:space-between; align-items:center; gap:10px; min-height:57px; padding:8px 14px; border-bottom:1px solid var(--line); background:var(--panel); }
+.toolbar h2 { margin:0; font-size:15px; font-weight:600; }
+.toolbar span { color:var(--sub); font-size:13px; }
+.stage { flex:1; overflow:auto; padding:22px; display:flex; flex-direction:column; align-items:center; }
+.sheet { width:100%; max-width:1000px; flex:none; padding:36px; background:#fff; box-shadow:0 3px 16px rgba(20,40,70,.20); }
+.sheet h2 { margin:0 0 30px; font-size:24px; text-align:center; }
+.results { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
+.result { min-width:0; padding:24px; border:1px solid var(--line); border-top:5px solid var(--accent); border-radius:6px; background:#fbfcfe; }
+.result .title { margin:0; color:var(--accent2); font-size:22px; font-weight:700; }
+.result .value { margin-top:18px; overflow-x:auto; overflow-y:hidden; white-space:nowrap; font-size:clamp(32px,5vw,64px); font-weight:700; font-variant-numeric:tabular-nums; line-height:1.3; }
+.result-unit { margin-top:6px; color:var(--sub); font-size:18px; text-align:right; }
+@media (min-width:901px) and (max-width:1200px) {
+  .sheet { padding:28px 24px; }
+  .results { grid-template-columns:1fr; gap:16px; }
+  .result { padding:16px 20px; }
+  .result .value { margin-top:10px; }
 }
-.row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 4px; }
-.field { display: flex; flex-direction: column; margin-bottom: 14px; }
-.field label { font-size: 14px; font-weight: bold; color: #333; margin-bottom: 4px; }
-.field input, .field select {
-  padding: 8px;
-  font-size: 16px;
-  border-radius: 8px;
-  border: 1px solid #ccc;
-  width: 100%;
+@media (max-width:900px) {
+  .app { height:auto; min-height:100vh; min-height:100dvh; flex-direction:column; overflow:visible; }
+  .side { width:100%; min-width:0; border-right:0; border-bottom:1px solid var(--line); }
+  .scroll { flex:none; overflow:visible; }
+  .main { flex:none; overflow:visible; }
+  .stage { overflow:visible; }
 }
-.results { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 4px; }
-.result {
-  background: #f4f9ff;
-  border-left: 6px solid #4da3ff;
-  padding: 10px;
-  border-radius: 8px;
+@media (max-width:480px) {
+  .scroll { padding:16px 12px 0; }
+  fieldset { padding:10px 12px 12px; }
+  .row label { flex-basis:42%; }
+  .unit { flex-basis:28px; }
+  .stage { padding:16px 12px; }
+  .sheet { padding:24px 16px; }
+  .sheet h2 { margin-bottom:22px; font-size:22px; }
+  .results { gap:12px; }
+  .result { padding:16px 12px; }
+  .result .title { font-size:20px; }
 }
-.result .title { font-weight: bold; color: #1e70bf; font-size: 14px; }
-.result .value { font-size: 22px; margin-top: 5px; color: #333; }
 </style>
 </head>
 <body>
 
-<div class="bg">
-  <div class="calculator">
-    <h2>ケビキ線電卓</h2>
-
-    <div class="row">
-      <div class="field">
-        <label for="keta">桁寸</label>
-        <select id="keta">
-          <option value="105">105角</option>
-          <option value="90">90角</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="taruki">垂木成（mm）</label>
-        <input type="number" id="taruki" value="60" min="0" max="100">
-      </div>
+<div class="app">
+  <aside class="side" aria-label="入力">
+    <header><h1>垂木けびき線</h1></header>
+    <div class="scroll">
+      <fieldset>
+        <legend>部材寸法</legend>
+        <div class="row">
+          <label for="keta">桁寸</label>
+          <select id="keta">
+            <option value="105">105角</option>
+            <option value="90">90角</option>
+          </select>
+          <span class="unit" aria-hidden="true"></span>
+        </div>
+        <div class="row">
+          <label for="taruki">垂木成<span class="sr-only">（mm）</span></label>
+          <input type="number" id="taruki" value="60" min="0" max="100">
+          <span class="unit" aria-hidden="true">mm</span>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>屋根の寸法</legend>
+        <div class="row">
+          <label for="kobai">勾配<span class="sr-only">（寸）</span></label>
+          <select id="kobai"></select>
+          <span class="unit" aria-hidden="true">寸</span>
+        </div>
+        <div class="row">
+          <label for="noki">軒の出<span class="sr-only">（mm）</span></label>
+          <input type="number" id="noki" value="455" min="0">
+          <span class="unit" aria-hidden="true">mm</span>
+        </div>
+      </fieldset>
     </div>
-
-    <div class="row">
-      <div class="field">
-        <label for="kobai">勾配（寸）</label>
-        <select id="kobai"></select>
-      </div>
-      <div class="field">
-        <label for="noki">軒の出（mm）</label>
-        <input type="number" id="noki" value="455" min="0">
-      </div>
+  </aside>
+  <main class="main">
+    <div class="toolbar"><h2>計算結果</h2><span>単位 mm</span></div>
+    <div class="stage">
+      <section class="sheet" aria-labelledby="result-title">
+        <h2 id="result-title">垂木けびき線位置</h2>
+        <div class="results" aria-live="polite" aria-atomic="true">
+          <div class="result">
+            <h3 class="title">タツ</h3>
+            <div class="value" id="kane">—</div>
+            <div class="result-unit">mm</div>
+          </div>
+          <div class="result">
+            <h3 class="title">カネ</h3>
+            <div class="value" id="tatsu">—</div>
+            <div class="result-unit">mm</div>
+          </div>
+        </div>
+      </section>
     </div>
-
-    <div class="results">
-      <div class="result">
-        <div class="title">タツ</div>
-        <div class="value" id="kane">—</div>
-      </div>
-      <div class="result">
-        <div class="title">カネ</div>
-        <div class="value" id="tatsu">—</div>
-      </div>
-    </div>
-  </div>
+  </main>
 </div>
 
 <script>
