@@ -45,7 +45,7 @@
   activate(initial);
   // 旧ボルト画面への寸法・結果リンクも、同じ画面内へ引き継ぐ。
   if (["result-section", "dimension-details"].includes(requested)) {
-    document.querySelector("#panel-bolt iframe").src = "bolt.html?v=20261031-3#" + (requested === "dimension-details" ? "drawing" : requested);
+    document.querySelector("#panel-bolt iframe").src = "bolt.html?v=20261031-4#" + (requested === "dimension-details" ? "drawing" : requested);
     activate("bolt");
   }
   if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) {

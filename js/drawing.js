@@ -230,7 +230,7 @@
         "#476b5e",
         "clearance",
       );
-      if (options.interactive && current.leftSeat === "box")
+      if (options.interactive && !options.workspace && current.leftSeat === "box")
         dim(
           0,
           g.start,
