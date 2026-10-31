@@ -148,6 +148,28 @@ test("最初から入力図を表示し、詳細・保存メモ・添付資料�
   assert.equal(a.result().effective, 292);
 });
 
+test("パターンタブは種類を勝手に追加せず、入力・計算・保存を変えずに図を見ながら切り替えられる", (t) => {
+  const a = setup(t);
+  a.type();
+  const before = JSON.stringify(a.model());
+  const workspace = a.w.localStorage.getItem(workspaceKey);
+  a.open("clearance");
+  a.click("#joint-tab-pattern");
+  assert.equal(a.get("#joint-input-panel").hidden, true);
+  assert.equal(a.get("#joint-pattern-panel").hidden, false);
+  assert.equal(a.get("#joint-tab-pattern").getAttribute("aria-selected"), "true");
+  assert.equal(a.get("#diagram-editor").hidden, true);
+  assert.equal(a.get("#joint-pattern-list").querySelectorAll("button,input,select").length, 0);
+  assert.equal(a.get("#drawing svg").dataset.effective, "277");
+  assert.equal(a.get("#catalog").children.length, 18);
+  assert.equal(JSON.stringify(a.model()), before);
+  assert.equal(a.w.localStorage.getItem(workspaceKey), workspace);
+  a.get("#joint-tab-pattern").dispatchEvent(new a.w.KeyboardEvent("keydown", { key:"ArrowRight", bubbles:true }));
+  assert.equal(a.get("#joint-input-panel").hidden, false);
+  assert.equal(a.get("#joint-pattern-panel").hidden, true);
+  assert.equal(a.doc.activeElement, a.get("#joint-tab-input"));
+});
+
 test("図の柱と穴位置を直接変更すると計算・保存・寸法の詳細が一致", (t) => {
   const a = setup(t);
   a.type();

@@ -810,6 +810,13 @@ dialog::backdrop {
 #save-name-dialog input { font-size:20px; }
 .save-name-actions button { min-height:42px; font-size:16px; }
 .save-name-actions .confirm-save { color:white; background:var(--green); border-color:var(--green); }
+.joint-tabs { display:flex; gap:4px; margin-right:auto; }
+.joint-tabs button { min-height:32px; padding:5px 10px; font-size:14px; color:#294b43; }
+.joint-tabs button[aria-selected="true"] { background:#e8f4f0; border-color:var(--green); color:var(--green); font-weight:700; }
+#joint-input-panel { display:flex; flex-direction:column; gap:inherit; }
+.input-pane #joint-pattern-panel { padding:12px; border:1px solid var(--line); border-radius:6px; }
+#joint-pattern-panel h2 { margin:0 0 8px; font-size:17px; }
+#joint-pattern-list p { margin:0; color:#405c54; font-size:14px; line-height:1.7; }
 .print-only {
   display: none;
 }
@@ -1287,6 +1294,7 @@ dialog::backdrop {
   .brand > svg,
   .local-label,
   .actions,
+  .joint-tabs,
   .session-bar,
   .input-pane,
   .drawing-actions,
@@ -1509,6 +1517,7 @@ dialog::backdrop {
   .brand h1 { font-size:18px; }
   .workspace { display:flex; flex-direction:column; gap:12px; }
   .input-pane { flex-direction:row; flex-wrap:wrap; }
+  #joint-input-panel { width:100%; flex-direction:row; flex-wrap:wrap; }
   .input-pane .bolt-choice,.input-pane .segment { flex:1; min-width:160px; }
   .results { grid-template-columns:1fr 1fr 1.2fr; }
   .projection-metric { grid-column:auto; border-left:1px solid var(--line); padding-left:10px; }

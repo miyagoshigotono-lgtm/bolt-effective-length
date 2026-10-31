@@ -188,6 +188,28 @@
   function setValue(id, value) {
     if ($(id).value !== String(value)) $(id).value = value;
   }
+  const jointTabs = [$("joint-tab-input"), $("joint-tab-pattern")];
+  function selectJointTab(selected) {
+    closeEditor(false);
+    for (const tab of jointTabs) {
+      const active = tab === selected;
+      tab.setAttribute("aria-selected", String(active));
+      tab.tabIndex = active ? 0 : -1;
+      $(tab.getAttribute("aria-controls")).hidden = !active;
+    }
+    applyZoom();
+  }
+  for (const tab of jointTabs) {
+    tab.addEventListener("click", () => selectJointTab(tab));
+    tab.addEventListener("keydown", event => {
+      const index = jointTabs.indexOf(tab);
+      const next = { ArrowRight: (index + 1) % jointTabs.length, ArrowLeft: (index + jointTabs.length - 1) % jointTabs.length, Home: 0, End: jointTabs.length - 1 }[event.key];
+      if (next === undefined) return;
+      event.preventDefault();
+      selectJointTab(jointTabs[next]);
+      jointTabs[next].focus();
+    });
+  }
   function selectOptions(items, selected) {
     return items
       .map(
