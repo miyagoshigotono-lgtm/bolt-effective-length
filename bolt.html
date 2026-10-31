@@ -8,12 +8,12 @@
       content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"
     />
     <title>ボルト有効長</title>
-    <link rel="stylesheet" href="styles.css?v=20261031-2" />
+    <link rel="stylesheet" href="styles.css?v=20261031-3" />
     <script src="vendor/lucide.min.js" defer></script>
     <script src="js/defaults.js" defer></script>
     <script src="js/calculator.js" defer></script>
     <script src="js/drawing.js?v=20261031-2" defer></script>
-    <script src="js/app.js?v=20261031-2" defer></script>
+    <script src="js/app.js?v=20261031-3" defer></script>
   </head>
   <body>
     <header class="app-header">
@@ -22,6 +22,10 @@
         <h1>ボルト有効長</h1>
         <span class="local-label">M12</span>
       </div>
+      <nav class="joint-tabs" role="tablist" aria-label="木組みの設定">
+        <button id="joint-tab-input" type="button" role="tab" aria-controls="joint-input-panel" aria-selected="true">条件入力</button>
+        <button id="joint-tab-pattern" type="button" role="tab" aria-controls="joint-pattern-panel" aria-selected="false" tabindex="-1">パターン</button>
+      </nav>
       <nav class="actions" aria-label="ファイル操作">
         <button type="button" id="undo" title="元に戻す" aria-label="元に戻す">
           <i data-lucide="undo-2"></i>
@@ -74,6 +78,7 @@
     </div>
     <main class="workspace">
       <aside class="input-pane" id="input-pane" aria-label="ボルトと入力方法">
+        <div id="joint-input-panel" role="tabpanel" aria-labelledby="joint-tab-input">
         <fieldset class="bolt-choice">
           <legend>ボルト <span class="badge">M12</span></legend>
           <label
@@ -100,6 +105,13 @@
             ></label
           >
         </fieldset>
+        </div>
+        <section id="joint-pattern-panel" role="tabpanel" aria-labelledby="joint-tab-pattern" tabindex="0" hidden>
+          <h2>木組みのパターン</h2>
+          <div id="joint-pattern-list">
+            <p>パターンは、これから追加します。</p>
+          </div>
+        </section>
       </aside>
       <div class="output-pane">
         <section class="result-section" id="result-section" aria-live="polite">
