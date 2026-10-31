@@ -114,10 +114,15 @@ function setup(t, workspace = null, width = 1280, visualViewport = null) {
     result: () => w.BoltApp.getResult(),
     model: () => w.BoltApp.getModel(),
     open: (key) => click(`#drawing [data-edit="${key}"]`),
+    save(name = null, asNew = false) {
+      click(asNew ? "#save-as" : "#save");
+      if (name !== null) input("#save-name", name);
+      get("#save-name-form").dispatchEvent(new w.Event("submit", { bubbles:true, cancelable:true }));
+    },
   };
 }
 
-test("最初から入力図を表示し、普段の入力はボルトと方式だけ、詳細・保存名は閉じる", (t) => {
+test("最初から入力図を表示し、詳細・保存メモ・添付資料の欄を画面から外す", (t) => {
   const a = setup(t);
   assert.equal(
     a.doc.querySelectorAll("#input-pane input[type=text], #input-pane select")
@@ -126,6 +131,10 @@ test("最初から入力図を表示し、普段の入力はボルトと方式�
   );
   assert.equal(a.get("#dimension-details").open, false);
   assert.equal(a.get("#file-details").open, false);
+  assert.equal(a.get(".settings-section").hidden, true);
+  assert.equal(a.get(".references").hidden, true);
+  for (const key of ["beamWidth","beamHeight","boltDepth","recessWidth","rightProjection"])
+    assert.ok(a.get(`#drawing button[data-edit="${key}"]`));
   assert.equal(a.get("#drawing svg").dataset.preview, "true");
   assert.equal(a.get("#drawing svg").dataset.selected, "");
   assert.equal(a.get("#download-svg").disabled, true);
@@ -329,12 +338,12 @@ test("キーボードで図を開き、Escで閉じる。縦図も同じ入力�
   );
 });
 
-test("保存名・メモの移動後も保存とJSON・SVG書出しは同じ計算結果", async (t) => {
+test("従来の保存名・メモも残し、保存とJSON・SVG書出しは同じ計算結果", async (t) => {
   const a = setup(t);
   a.type();
   a.input("#name", "入力図テスト");
   a.input("#note", "確認用");
-  a.click("#save");
+  a.save();
   const saved = JSON.parse(
     a.w.localStorage.getItem("bolt-effective-length.saved.v1"),
   );
@@ -355,14 +364,56 @@ test("保存名・メモの移動後も保存とJSON・SVG書出しは同じ計�
   );
 });
 
-test("320・700・1440の幅でも編集先・入力・数値は一致し、図の最小幅を確保", (t) => {
+test("保存は名前を確認してから行い、空欄・キャンセル・Escでは構成を保存しない", (t) => {
+  const a = setup(t);
+  a.type();
+  const before = a.model();
+  a.click("#save");
+  assert.equal(a.get("#save-name-dialog").open,true);
+  assert.equal(a.w.localStorage.getItem("bolt-effective-length.saved.v1"),null);
+  a.input("#save-name","   ");
+  a.get("#save-name-form").dispatchEvent(new a.w.Event("submit",{bubbles:true,cancelable:true}));
+  assert.equal(a.get("#save-name-dialog").open,true);
+  assert.match(a.get("#save-name-error").textContent,/入力/);
+  a.click("#cancel-save-name");
+  assert.deepEqual(a.model(),before);
+  assert.equal(a.w.localStorage.getItem("bolt-effective-length.saved.v1"),null);
+  a.click("#save");
+  a.get("#save-name-dialog").dispatchEvent(new a.w.Event("cancel",{cancelable:true}));
+  a.get("#save-name-dialog").close();
+  assert.deepEqual(a.model(),before);
+});
+
+test("確認した名前で保存し、更新・別保存・Ctrl+Sでも確認を通す", (t) => {
+  const a = setup(t);
+  a.type();
+  const items = () => JSON.parse(a.w.localStorage.getItem("bolt-effective-length.saved.v1")).items;
+  a.save("  保存検証  ");
+  assert.equal(items()[0].document.model.name,"保存検証");
+  const id = items()[0].id;
+  a.save("名前の変更");
+  assert.equal(items().length,1);
+  assert.equal(items()[0].id,id);
+  assert.equal(items()[0].document.model.name,"名前の変更");
+  a.save("別の構成",true);
+  assert.equal(items().length,2);
+  assert.notEqual(items()[1].id,id);
+  a.doc.body.dispatchEvent(new a.w.KeyboardEvent("keydown",{key:"s",ctrlKey:true,bubbles:true,cancelable:true}));
+  assert.equal(a.get("#save-name-dialog").open,true);
+  assert.equal(a.get("#save-name").value,"別の構成");
+  a.click("#cancel-save-name");
+  assert.equal(items().length,2);
+});
+
+test("320・700・1440の幅でも編集先・入力・数値は一致し、図を表示領域へ収める", (t) => {
   for (const width of [320, 700, 1440]) {
     const a = setup(t, null, width);
     a.type();
     a.open("clearance");
     a.input("#diagram-value", "210");
     assert.equal(a.result().effective, 287);
-    assert.ok(parseFloat(a.get("#drawing").style.width) >= 619.9);
+    assert.ok(parseFloat(a.get("#drawing svg").style.width) <= width-40);
+    assert.ok(parseFloat(a.get("#drawing svg").style.height) <= 490);
     assert.equal(
       a.get("#diagram-editor").parentElement.id,
       "diagram-workbench",
@@ -376,7 +427,7 @@ test("図入力後の構成を保存一覧から開け、JSONの読込と不正J
   a.open("clearance");
   a.input("#diagram-value", "210");
   a.click("#close-diagram");
-  a.click("#save");
+  a.save();
   a.click("#reset");
   a.click("#open-saved");
   a.click('#saved-list button[title="開く"]');
@@ -467,7 +518,7 @@ test("上段のかかり量は座金から先端まで。ナット内10と外3.5
       .get("#print-conditions")
       .textContent.includes("かかり量：左 13.5 mm / 右 13.5 mm"),
   );
-  for (const id of ["drawing", "print-drawing"])
+  for (const id of ["print-drawing"])
     assert.ok(
       a.get(`#${id}`).textContent.replace(/\s+/g, "").includes("かかり量13.5"),
     );
@@ -725,7 +776,7 @@ test("上下変更で飛び出し警告を再計算し、印刷・保存・SVG�
   assert.equal(a.result().effective, 451);
   const b = setup(t, JSON.parse(a.w.localStorage.getItem(workspaceKey)));
   assert.equal(b.result().effective, 451);
-  a.click("#save");
+  a.save();
   a.click("#export");
   const doc = JSON.parse(await a.downloads.at(-1).text());
   assert.equal(doc.result.effective, 451);
@@ -767,15 +818,15 @@ test("編集欄は図と同じ領域の非モーダル。暗幕や操作制限�
     a.get("#drawing-viewport").closest(".drawing-section"),
   );
   assert.equal(a.get("#diagram-workbench").classList.contains("editing"), true);
-  assert.equal(a.doc.querySelector('[aria-modal="true"], [inert]'), null);
+  assert.equal(a.get("#diagram-workbench").querySelector('[aria-modal="true"], [inert]'), null);
   a.input("#diagram-value", "220");
   a.open("column");
   assert.equal(a.get("#diagram-title").textContent, "柱の幅");
   assert.equal(a.model().clearance, "220");
   step(a, "diagram-value", 1);
   assert.equal(a.result().effective, 298);
-  a.click("#zoom-in");
-  assert.equal(a.get("#zoom-label").textContent, "125%");
+  a.click("#zoom-reset");
+  assert.equal(a.get("#zoom-label").textContent, "全体表示");
   assert.equal(a.get("#diagram-editor").hidden, false);
   a.open("washer-left");
   assert.equal(modalCount, 0);
@@ -823,6 +874,7 @@ function editorGeometry(a, targetRect, editorRect = () => rectangle(0, 0, 280, 1
   a.w.SVGElement.prototype.getBoundingClientRect = function () {
     return targetRect(this);
   };
+  a.w.HTMLElement.prototype.getBoundingClientRect = function () { return targetRect(this); };
   a.get("#diagram-editor").getBoundingClientRect = editorRect;
 }
 
@@ -855,7 +907,7 @@ test("押した数値のすぐ下に変更欄を置き、画面右下では上�
 test("同じ穴の図形と説明文字を区別し、実際に押したほうを変更欄の基準にする", (t) => {
   const a = setup(t, null, 1440);
   editorGeometry(a, (element) =>
-    rectangle(element.querySelector(".edit-hit") ? 900 : 300, 300, 80, 40),
+    rectangle(element.matches("button") || element.querySelector(".edit-hit") ? 900 : 300, 300, 80, 40),
   );
   const targets = () => a.doc.querySelectorAll('#drawing [data-edit="rightSeat"]');
   assert.equal(targets().length, 2);
@@ -872,7 +924,7 @@ test("同じ穴の図形と説明文字を区別し、実際に押したほう�
   assert.equal(a.get("#diagram-editor").style.left, "200px");
 });
 
-test("数値変更による図の再描画と、図内スクロール・ズーム・向き変更に追従する", (t) => {
+test("数値変更による図の再描画と、全体表示・向き変更に編集欄が追従する", (t) => {
   const a = setup(t, null, 1440);
   let scroll = 0;
   editorGeometry(a, () =>
@@ -889,7 +941,7 @@ test("数値変更による図の再描画と、図内スクロール・ズー�
   a.get("#drawing-viewport").dispatchEvent(new a.w.Event("scroll"));
   assert.equal(a.get("#diagram-editor").style.left, "250px");
   scroll = 30;
-  a.click("#zoom-in");
+  a.click("#zoom-reset");
   assert.equal(a.get("#diagram-editor").style.left, "300px");
   a.change("#direction", "vertical");
   assert.equal(a.get("#diagram-editor").hidden, false);
@@ -937,13 +989,13 @@ test("画面キーボードで見える範囲が変わっても、変更欄は�
   assert.equal(a.doc.activeElement, a.get("#diagram-value"));
 });
 
-test("欄外を押すと閉じ、変更対象・ズーム・詳細側の操作中は閉じない", (t) => {
+test("欄外を押すと閉じ、変更対象・全体表示の操作中は閉じない", (t) => {
   const a = setup(t);
   a.open("column");
   const pointer = (selector) => a.get(selector).dispatchEvent(
     new a.w.MouseEvent("pointerdown", { bubbles: true }),
   );
-  for (const selector of ["#diagram-value", "#zoom-in", "#column", '#drawing [data-edit="clearance"]']) {
+  for (const selector of ["#diagram-value", "#zoom-reset", "#column", '#drawing [data-edit="clearance"]']) {
     pointer(selector);
     assert.equal(a.get("#diagram-editor").hidden, false);
   }

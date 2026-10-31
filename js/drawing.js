@@ -134,6 +134,7 @@
       edit = "",
     ) {
       if (options.print) size = Math.round(size * 1.25);
+      if (options.workspace) size = Math.max(size, vertical ? 28 : 22);
       const lines = split(value, maxWidth, size);
       const interactive = options.interactive && edit;
       if (interactive) {
@@ -430,7 +431,7 @@
       );
     const startY = vertical ? 1020 : 505;
     let heights = [];
-    const cols = options.interactive
+    const cols = options.workspace ? [] : options.interactive
       ? [
           {
             title: "左",
@@ -540,7 +541,7 @@
             : text(detail, x, y, value, cw, 15);
       heights.push(y);
     });
-    let bottom = Math.max(...heights) + 12;
+    let bottom = options.workspace ? (vertical ? 1010 : 485) : Math.max(...heights) + 12;
     if (options.print && !vertical) {
       detail.length = 0;
       let y = 505;

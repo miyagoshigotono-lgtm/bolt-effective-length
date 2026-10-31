@@ -10,7 +10,6 @@
   let model = calc.createModel(data),
     result = null,
     svg = "",
-    zoom = 100,
     noticeTimer;
   let savedId = null,
     past = [],
@@ -25,6 +24,7 @@
     outputSignature = "";
   let pendingWorkspaceRecovery = null;
   let printScroll = null;
+  let saveAsNew = false;
   let lastDiagram = null,
     editorKey = "",
     editorTargetIndex = 0;
@@ -112,7 +112,6 @@
     closeEditor(false);
     model = next;
     savedId = id;
-    zoom = 100;
     renderForm();
   }
   function restoreHistory(backward) {
@@ -176,15 +175,14 @@
   function applyZoom() {
     const el = $("drawing").querySelector("svg");
     if (!el) return;
-    const box = el.viewBox.baseVal,
-      viewport = $("drawing-viewport");
-    const fit = Math.min((viewport.clientWidth - 12) / box.width, 1.15);
-    const readableFit = Math.max(fit, Math.min(1, 620 / box.width));
-    $("drawing").style.width =
-      Math.max(1, (box.width * readableFit * zoom) / 100) + "px";
-    $("drawing").style.height =
-      Math.max(1, (box.height * readableFit * zoom) / 100) + "px";
-    $("zoom-label").textContent = zoom + "%";
+    const box = el.viewBox.baseVal, canvas = $("drawing-canvas");
+    const width = canvas.clientWidth || $("drawing-viewport").clientWidth || window.innerWidth;
+    const height = canvas.clientHeight || Math.max(240, window.innerHeight - 360);
+    // 図の縦横比を保ったまま、使える領域の両方向へ収める。
+    const fit = Math.min(Math.max(1,width-4)/box.width, Math.max(1,height-4)/box.height);
+    el.style.width = Math.max(1,box.width*fit)+"px";
+    el.style.height = Math.max(1,box.height*fit)+"px";
+    $("zoom-label").textContent = "全体表示";
     positionEditor();
   }
   function setValue(id, value) {
@@ -412,13 +410,32 @@
       initial.boltType = "double";
       lastDiagram = calc.calculate(initial, data);
     }
-    $("drawing").innerHTML = drawing.render(lastDiagram, data, {
+    const chart = drawing.render(lastDiagram, data, {
       compact: true,
       interactive: true,
+      workspace: true,
       preview: !result.ok,
       geometryPending: !draft.ok,
       sourceModel: model,
     });
+    const control = (key,label) => `<button type="button" data-edit="${key}" aria-label="${esc(label)}を変更">${esc(label)}</button>`;
+    const partName = side => data.parts.find(part=>part.id===model.washers[side].partId).name;
+    const seatName = side => model[side+"Seat"]==="box" ? "ボックス穴 58角" : "座彫り 28";
+    $("drawing").innerHTML = `<div id="drawing-canvas">${chart}</div><div class="drawing-controls">
+      <div><strong>左</strong>${control("leftSeat",seatName("left"))}${control("washer-left",partName("left"))}${model.boltType==="double"?control("leftProjection","最低かかり "+(model.leftProjection||"未入力")):""}</div>
+      <div><strong>木部</strong>${control("beamWidth","幅 "+(model.beamWidth||"未入力"))}${control("beamHeight","高さ "+(model.beamHeight||"未入力"))}${control("boltDepth","ボルト深さ "+(model.boltDepth||"未入力"))}${model.leftSeat==="recess"||model.rightSeat==="recess"?control("recessWidth","座彫り幅 "+(model.recessWidth||"未入力")):""}</div>
+      <div><strong>右</strong>${control("rightSeat",seatName("right"))}${control("washer-right",partName("right"))}${control("rightProjection","最低かかり "+(model.rightProjection||"未入力"))}</div>
+    </div>`;
+    // 図形と寸法の実際の範囲へ余白を合わせ、縦図でも空白のために縮小しない。
+    const screenSvg = $("drawing").querySelector("svg");
+    const content = screenSvg.lastElementChild;
+    if (typeof content.getBBox === "function") {
+      try {
+        const box = content.getBBox();
+        if (box.width > 0 && box.height > 0)
+          screenSvg.setAttribute("viewBox", `${box.x-12} ${box.y-12} ${box.width+24} ${box.height+24}`);
+      } catch { /* 非表示の起動時は、元の図の範囲で表示する。 */ }
+    }
     $("drawing").className = result.ok ? "" : "diagram-preview";
     $("diagram-state").textContent = result.ok
       ? ""
@@ -670,6 +687,7 @@
       }[result.status];
       $("selection-status").className = "status " + result.status;
       $("warnings").textContent = result.warnings.join(" ");
+      $("print-warnings").textContent = $("warnings").textContent;
       try {
         svg = drawing.render(result, data);
         renderInputDrawing();
@@ -715,6 +733,7 @@
         "protruding",
       ])
         $("result-" + key).textContent = "--";
+      $("print-warnings").textContent = "";
       $("selection-status").textContent = model.boltType
         ? "未計算"
         : "種別を選択";
@@ -725,6 +744,10 @@
         link.className = "error-link";
         link.textContent = error.message;
         link.addEventListener("click", () => {
+          if (error.field !== "boltType" && $(error.field)?.closest(".settings-section")) {
+            openEditor(error.field);
+            return;
+          }
           const el = fieldElement(error.field);
           if (el) {
             if (el.closest("details")) el.closest("details").open = true;
@@ -1186,15 +1209,7 @@
     model.candidate = button.dataset.length;
     renderOutput();
   });
-  for (const [id, change] of [
-    ["zoom-in", 25],
-    ["zoom-out", -25],
-    ["zoom-reset", 0],
-  ])
-    $(id).addEventListener("click", () => {
-      zoom = change ? Math.min(800, Math.max(25, zoom + change)) : 100;
-      applyZoom();
-    });
+  $("zoom-reset").addEventListener("click", applyZoom);
   $("download-svg").addEventListener("click", () => {
     if (svg) download(svg, "image/svg+xml", filename("svg", "-section"));
   });
@@ -1255,8 +1270,28 @@
       );
     }
   }
-  $("save").addEventListener("click", () => saveConfiguration(false));
-  $("save-as").addEventListener("click", () => saveConfiguration(true));
+  function confirmSaveName(asNew) {
+    if ($("save-name-dialog").open) { $("save-name").focus(); return; }
+    closeEditor(false);
+    saveAsNew = asNew;
+    $("save-name").value = model.name || `${model.boltType === "single" ? "片引き" : "両引き"}_${result?.ok ? "E"+calc.format(result.effective) : "途中入力"}`;
+    $("save-name-error").textContent = "";
+    if (!$("save-name-dialog").open) $("save-name-dialog").showModal();
+    $("save-name").focus();
+    $("save-name").select();
+  }
+  $("save-name-form").addEventListener("submit", event => {
+    event.preventDefault();
+    const name = $("save-name").value.trim();
+    if (!name) { $("save-name-error").textContent = "保存名を入力してください。"; $("save-name").focus(); return; }
+    model.name = name;
+    renderForm();
+    saveConfiguration(saveAsNew);
+    $("save-name-dialog").close();
+  });
+  $("cancel-save-name").addEventListener("click", () => $("save-name-dialog").close());
+  $("save").addEventListener("click", () => confirmSaveName(false));
+  $("save-as").addEventListener("click", () => confirmSaveName(true));
   $("undo-delete").addEventListener("click", () => {
     if (!deletedItem) return;
     try {
@@ -1286,7 +1321,6 @@
   $("close-saved").addEventListener("click", () => $("saved-dialog").close());
   $("reset").addEventListener("click", () => {
     replaceModel(calc.createModel(data));
-    $("zoom-label").textContent = "100%";
     notify(
       "入力条件を初期状態に戻しました。前の入力は「元に戻す」で復元できます。",
     );
@@ -1325,6 +1359,8 @@
   window.visualViewport?.addEventListener("scroll", positionEditor);
   if (window.ResizeObserver)
     new window.ResizeObserver(positionEditor).observe($("diagram-editor"));
+  if (window.ResizeObserver)
+    new window.ResizeObserver(applyZoom).observe($("drawing-viewport"));
   document.addEventListener(
     "input",
     (event) => {
@@ -1369,7 +1405,7 @@
     }
     if (event.key.toLowerCase() === "s") {
       event.preventDefault();
-      saveConfiguration(event.shiftKey);
+      confirmSaveName(event.shiftKey);
     }
   });
   window.addEventListener("beforeunload", (event) => {
