@@ -64,7 +64,7 @@ test("不正な画面指定・保存不能でも外部URLを開かず、旧寸�
   assert.equal(a.tab("kebiki").getAttribute("aria-selected"), "true");
   const b = suite(t, { hash: "#dimension-details", stored: "keraba" });
   assert.equal(b.tab("bolt").getAttribute("aria-selected"), "true");
-  assert.ok(b.frame("bolt").src.endsWith("#dimension-details"));
+  assert.ok(b.frame("bolt").src.endsWith("#drawing"));
 });
 
 function kebiki(t, saved = null) {

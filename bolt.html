@@ -8,19 +8,19 @@
       content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"
     />
     <title>ボルト有効長</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=20261031-2" />
     <script src="vendor/lucide.min.js" defer></script>
     <script src="js/defaults.js" defer></script>
     <script src="js/calculator.js" defer></script>
-    <script src="js/drawing.js?v=20261029-seat" defer></script>
-    <script src="js/app.js?v=20261029-seat" defer></script>
+    <script src="js/drawing.js?v=20261031-2" defer></script>
+    <script src="js/app.js?v=20261031-2" defer></script>
   </head>
   <body>
     <header class="app-header">
       <div class="brand">
         <i data-lucide="ruler" aria-hidden="true"></i>
         <h1>ボルト有効長</h1>
-        <span class="local-label">ローカル</span>
+        <span class="local-label">M12</span>
       </div>
       <nav class="actions" aria-label="ファイル操作">
         <button type="button" id="undo" title="元に戻す" aria-label="元に戻す">
@@ -70,7 +70,7 @@
     </div>
     <div class="session-bar">
       <span id="session-status"></span><a href="#result-section">結果</a
-      ><a href="#dimension-details">寸法</a>
+      ><a href="#catalog-section">カタログ候補</a>
     </div>
     <main class="workspace">
       <aside class="input-pane" id="input-pane" aria-label="ボルトと入力方法">
@@ -140,12 +140,7 @@
               <strong id="result-protruding">--</strong></span
             >
           </div>
-          <div id="warnings" class="warnings"></div>
-          <label class="check-label" id="output-confirmation" hidden
-            ><input type="checkbox" id="output-confirmed" /><span
-              >不足・該当なしを確認して印刷する</span
-            ></label
-          >
+          <div id="print-warnings" class="print-only warnings"></div>
         </section>
         <section class="drawing-section">
           <div class="drawing-heading">
@@ -158,11 +153,7 @@
                   <option value="vertical">縦</option>
                 </select></label
               >
-              <button id="zoom-out" type="button" title="縮小">
-                <i data-lucide="zoom-out"></i></button
-              ><output id="zoom-label">100%</output
-              ><button id="zoom-in" type="button" title="拡大">
-                <i data-lucide="zoom-in"></i></button
+              <output id="zoom-label">全体表示</output
               ><button id="zoom-reset" type="button" title="全体表示">
                 <i data-lucide="scan"></i></button
               ><button id="download-svg" type="button" title="SVGを書き出す">
@@ -238,7 +229,7 @@
             class="measurement-definitions"
           ></div>
         </section>
-        <section class="settings-section">
+        <section class="settings-section" hidden inert>
           <details id="dimension-details">
             <summary>寸法の詳細 <span id="dimension-summary"></span></summary>
             <div class="detail-grid">
@@ -340,7 +331,7 @@
             </label>
           </details>
         </section>
-        <section class="catalog-section">
+        <section class="catalog-section" id="catalog-section">
           <div class="section-heading">
             <h2>カタログ候補</h2>
             <span id="catalog-count"></span>
@@ -349,6 +340,12 @@
             >採用候補<select id="candidate">
               <option value="auto">必要長以上の最小候補</option>
             </select></label
+          >
+          <div id="warnings" class="warnings" role="status" aria-live="polite"></div>
+          <label class="check-label" id="output-confirmation" hidden
+            ><input type="checkbox" id="output-confirmed" /><span
+              >不足・該当なしを確認して印刷する</span
+            ></label
           >
           <div id="catalog" class="catalog-grid"></div>
           <div id="catalog-source" class="source-note"></div>
@@ -368,7 +365,7 @@
             </table>
           </details>
         </section>
-        <section class="references">
+        <section class="references" hidden inert>
           <details>
             <summary>添付資料</summary>
             <div class="reference-links">
@@ -428,6 +425,17 @@
         </button>
       </div>
       <div id="saved-list"></div>
+    </dialog>
+    <dialog id="save-name-dialog" aria-labelledby="save-name-title">
+      <form id="save-name-form">
+        <h2 id="save-name-title">保存名を確認</h2>
+        <label class="field">保存名<input id="save-name" maxlength="200" required autocomplete="off" /></label>
+        <p id="save-name-error" class="editor-error" role="alert"></p>
+        <div class="save-name-actions">
+          <button id="cancel-save-name" type="button">キャンセル</button>
+          <button type="submit" class="confirm-save">この名前で保存</button>
+        </div>
+      </form>
     </dialog>
   </body>
 </html>
