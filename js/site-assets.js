@@ -6,7 +6,7 @@
   // 配信とオフライン保存で、同じ公開対象だけを使う。
   return [
     "index.html", "suite.css", "js/suite.js", "js/site-assets.js",
-    "manifest.webmanifest", "sw.js", "assets/calculator.svg", "assets/icon-192.png", "assets/icon-512.png",
+    "manifest.webmanifest", "sw.js", "assets/calculator.svg", "assets/icon-192.png", "assets/icon-512.png", "assets/icon-512-maskable.png",
     "bolt.html", "styles.css", "js/defaults.js", "js/calculator.js", "js/drawing.js", "js/app.js",
     "data/defaults.json", "vendor/lucide.min.js", "vendor/lucide-LICENSE.txt",
     "通常の有効長初期値.pdf", "サンプル.pdf", "有効長を見るための座金やナットなど.pdf",

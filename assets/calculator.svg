@@ -1,10 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <rect width="512" height="512" fill="#087f76"/>
-  <rect x="132" y="96" width="248" height="320" rx="24" fill="#fff"/>
-  <rect x="160" y="128" width="192" height="64" rx="8" fill="#d4eae6"/>
-  <g fill="#087f76">
-    <rect x="160" y="224" width="48" height="48" rx="8"/><rect x="232" y="224" width="48" height="48" rx="8"/><rect x="304" y="224" width="48" height="48" rx="8"/>
-    <rect x="160" y="296" width="48" height="48" rx="8"/><rect x="232" y="296" width="48" height="48" rx="8"/><rect x="304" y="296" width="48" height="80" rx="8"/>
-    <rect x="160" y="360" width="120" height="16" rx="8"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <rect x="0" y="0" width="1024" height="1024" rx="178" ry="178" fill="#124680"/>
+  <polygon points="257,493 583,226 583,301 257,568" fill="#FFFFFF"/>
+  <polygon points="257,620 767,200 767,276 257,696" fill="#FFFFFF"/>
+  <polygon points="308,706 767,328 767,402 308,780" fill="#EF9D1D"/>
+  <rect x="552" y="666" width="74" height="75" fill="#EF9D1D"/>
 </svg>
