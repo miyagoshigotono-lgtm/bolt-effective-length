@@ -12,6 +12,8 @@ function keraba(t, { blocked = false } = {}) {
     url: "https://example.test/tools/apps/keraba/",
     runScripts: "dangerously", pretendToBeVisual: true, virtualConsole: console,
     beforeParse(w) {
+      w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open",""); };
+      w.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
       w.localStorage.setItem("bolt-proof", "keep");
       w.localStorage.setItem("kebiki-line.input.v1", "keep");
       if (blocked) Object.defineProperty(w, "localStorage", { get() { throw new Error("保存不可"); } });
@@ -185,4 +187,38 @@ test("通常のダウンロード保存と共有先リンクは入力を外部�
   const text = await new Promise((resolve) => { reader.onload = () => resolve(reader.result); reader.readAsText(blob); });
   assert.deepEqual(JSON.parse(text).inputs, a.doc().inputs);
   assert.equal(a.w.document.querySelector(".file-buttons a").href, "https://github.com/miyagoshigotono-lgtm/keraba-project-data");
+});
+
+test("ケラバも保存名を確認してから書き出し、邸名は変えず、空欄・禁止文字・キャンセルでは保存しない", (t) => {
+  const a = keraba(t);
+  let count=0, name;
+  a.w.URL.createObjectURL=()=>{ count++; return "blob:test"; };
+  a.w.URL.revokeObjectURL=()=>{};
+  a.w.HTMLAnchorElement.prototype.click=function(){ name=this.download; };
+  a.change("name","保存検証");
+  const before=a.doc().inputs;
+  const submit=()=>a.get("projectSaveForm").dispatchEvent(new a.w.Event("submit",{bubbles:true,cancelable:true}));
+  a.get("btnSaveProject").click();
+  assert.equal(a.get("projectSaveDialog").open,true);
+  assert.equal(a.get("projectSaveName").value,"ケラバ_保存検証_通常");
+  assert.equal(count,0);
+  for(const invalid of ["   ","a/b","CON","name."]){
+    a.get("projectSaveName").value=invalid;
+    submit();
+    assert.equal(count,0);
+    assert.equal(a.get("projectSaveDialog").open,true);
+  }
+  a.get("projectSaveCancel").click();
+  assert.deepEqual(a.doc().inputs,before);
+  a.get("btnSaveProject").click();
+  a.get("projectSaveName").value="  確認した名前.json  ";
+  submit();
+  assert.equal(count,1);
+  assert.equal(name,"確認した名前.json");
+  assert.equal(a.get("projectSaveDialog").open,false);
+  assert.deepEqual(a.doc().inputs,before);
+  a.get("btnSaveProject").click();
+  assert.equal(a.get("projectSaveName").value,"確認した名前");
+  a.get("projectSaveCancel").click();
+  assert.equal(count,1);
 });

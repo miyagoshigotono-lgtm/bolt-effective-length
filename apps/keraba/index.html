@@ -48,6 +48,13 @@
   .file-status:empty{display:none}
   .file-status.is-error{color:#a51919;font-weight:700}
   #btnUndoOpen{margin-top:6px;font-size:14px}
+  #projectSaveDialog{width:460px;max-width:94vw;border:1px solid var(--line);border-radius:8px;padding:22px}
+  #projectSaveDialog::backdrop{background:#1c243050}
+  #projectSaveDialog h2{margin:0 0 18px;font-size:21px}
+  #projectSaveDialog label{display:block;font-size:16px;font-weight:700}
+  #projectSaveName{display:block;width:100%;margin-top:7px;font-size:19px}
+  #projectSaveError{color:#a51919;font-size:15px}
+  .project-save-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
   .scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:13px 18px 39px}
 
   fieldset{border:1px solid var(--line);border-radius:6px;margin:0 0 18px;padding:13px 16px 16px;
@@ -378,6 +385,17 @@
   </div>
 </div>
 
+<dialog id="projectSaveDialog" aria-labelledby="projectSaveTitle">
+  <form id="projectSaveForm">
+    <h2 id="projectSaveTitle">保存名を確認</h2>
+    <label>保存名<input id="projectSaveName" type="text" maxlength="120" required autocomplete="off"></label>
+    <p id="projectSaveError" role="alert"></p>
+    <div class="project-save-actions">
+      <button id="projectSaveCancel" type="button">キャンセル</button>
+      <button type="submit" class="primary">この名前で保存</button>
+    </div>
+  </form>
+</dialog>
 <script>
 "use strict";
 
@@ -506,6 +524,7 @@ const PROJECT_FORMAT = 'keraba-project';
 const PROJECT_VERSION = 1;
 const PROJECT_MAX_BYTES = 1024 * 1024;
 let fileImportBackup = null;
+const projectSaveNames = {normal:'',tile:''};
 
 function createProjectDocument(){
   // 計算結果は保存せず、読み込み時に入力から図・発注書を作り直す。
@@ -558,8 +577,8 @@ function showFileStatus(message, error=false){
   $('fileStatus').classList.toggle('is-error',error);
 }
 
-function saveProjectFile(){
-  const name=projectFileName(), text=JSON.stringify(createProjectDocument(),null,2)+'\n';
+function saveProjectFile(name=projectFileName()){
+  const text=JSON.stringify(createProjectDocument(),null,2)+'\n';
   try{
     const url=URL.createObjectURL(new Blob([text],{type:'application/json;charset=utf-8'}));
     const link=document.createElement('a');
@@ -1622,7 +1641,27 @@ function selectMode(mode){
 
 $('tabNormal').onclick = ()=> selectMode('normal');
 $('tabTile').onclick = ()=> selectMode('tile');
-$('btnSaveProject').onclick = saveProjectFile;
+$('btnSaveProject').onclick = ()=>{
+  if($('projectSaveDialog').open) return;
+  $('projectSaveName').value=projectSaveNames[activeMode] || projectFileName().replace(/\.json$/i,'');
+  $('projectSaveError').textContent='';
+  $('projectSaveDialog').showModal();
+  $('projectSaveName').focus();
+  $('projectSaveName').select();
+};
+$('projectSaveCancel').onclick = ()=>$('projectSaveDialog').close();
+$('projectSaveForm').onsubmit = event=>{
+  event.preventDefault();
+  const name=$('projectSaveName').value.trim().replace(/\.json$/i,'');
+  if(!name || /[<>:"/\\|?*\u0000-\u001f]/.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)){
+    $('projectSaveError').textContent='保存名を入力してください。記号 \\ / : * ? " < > | は使えません。';
+    $('projectSaveName').focus();
+    return;
+  }
+  projectSaveNames[activeMode]=name;
+  saveProjectFile(name+'.json');
+  $('projectSaveDialog').close();
+};
 $('btnOpenProject').onclick = ()=>{ $('projectFile').value=''; $('projectFile').click(); };
 $('btnUndoOpen').onclick = undoProjectOpen;
 $('projectFile').onchange = ()=>{
