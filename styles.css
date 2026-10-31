@@ -374,6 +374,7 @@ summary {
   border-color: var(--green);
   font-weight: 700;
 }
+.segment input:disabled + span { color:#73847f; background:#f2f4f3; border-color:var(--line); cursor:default; }
 .segment input:focus-visible + span {
   outline: 3px solid #71bcb2;
 }

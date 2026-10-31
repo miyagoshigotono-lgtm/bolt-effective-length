@@ -6,7 +6,7 @@ const { JSDOM, VirtualConsole } = require("jsdom");
 const root = path.resolve(__dirname, "..");
 const workspaceKey = "bolt-effective-length.workspace.v1";
 
-function setup(t, workspace = null, width = 1280, visualViewport = null) {
+function setup(t, workspace = null, width = 1280, visualViewport = null, blockRecovery = false) {
   const errors = [],
     virtualConsole = new VirtualConsole();
   virtualConsole.on("jsdomError", (error) => errors.push(error.message));
@@ -62,6 +62,13 @@ function setup(t, workspace = null, width = 1280, visualViewport = null) {
   w.HTMLAnchorElement.prototype.click = function () {};
   if (workspace)
     w.localStorage.setItem(workspaceKey, JSON.stringify(workspace));
+  if (blockRecovery) {
+    const originalSet = w.Storage.prototype.setItem;
+    w.Storage.prototype.setItem = function (key, value) {
+      if (key.startsWith(workspaceKey+".recovery.")) throw new Error("退避できません");
+      return originalSet.call(this,key,value);
+    };
+  }
   for (const file of [
     "js/defaults.js",
     "js/calculator.js",
@@ -190,29 +197,37 @@ test("図の柱と穴位置を直接変更すると計算・保存・寸法の�
   assert.ok(a.get("#dimension-summary").textContent.includes("ボルト深さ 52"));
 });
 
-test("左右の穴を図から選び、左箱穴の未入力は勝手に補完せず入力欄へ進む", (t) => {
+test("左のボックス穴は穴位置の項目を出さず、有効長の直接入力へ切り替える", (t) => {
   const a = setup(t);
   a.type();
   a.open("leftSeat");
   a.change("#diagram-option", "box");
-  assert.ok(a.get("#diagram-title").textContent.includes("左端"));
+  assert.equal(a.get("#diagram-title").textContent, "有効長");
+  assert.equal(a.model().mode,"direct");
+  assert.equal(a.get('[name=mode][value=joint]').disabled,true);
+  assert.equal(a.doc.querySelector('#drawing [data-edit="leftBoxPosition"]'),null);
+  assert.equal(a.doc.querySelector('#drawing [data-edit="column"]'),null);
+  assert.equal(a.get("#leftBoxPosition").type,"hidden");
   assert.equal(a.get("#diagram-value").value, "");
   assert.equal(a.result().ok, false);
   assert.equal(a.get("#drawing svg").dataset.preview, "true");
-  a.input("#diagram-value", "70");
+  a.input("#diagram-value", "235");
   a.click("#close-diagram");
   assert.equal(a.result().effective, 235);
   a.open("rightSeat");
   a.change("#diagram-option", "recess");
   a.click("#close-diagram");
-  assert.equal(a.result().effective, 207);
+  assert.equal(a.result().effective, 235);
   a.open("leftSeat");
   a.change("#diagram-option", "recess");
   a.click("#close-diagram");
-  assert.equal(a.result().effective, 249);
+  assert.equal(a.result().effective, 235);
+  assert.equal(a.get('[name=mode][value=joint]').disabled,false);
+  a.mode("joint");
+  assert.equal(a.result().effective,249);
 });
 
-test("左箱穴の位置が未入力でも図形は58角に切り替わり、入力・保存を勝手に補完しない", (t) => {
+test("左のボックス穴で有効長が未入力なら参考図のままにし、入力や保存を補完しない", (t) => {
   for (const boltType of ["", "single", "double"]) {
     const a = setup(t);
     if (boltType) a.type(boltType);
@@ -221,10 +236,10 @@ test("左箱穴の位置が未入力でも図形は58角に切り替わり、入
     const hole = a.get('#drawing [data-row="left-seat"]');
     assert.equal(hole.dataset.seat, "box");
     assert.equal(hole.getAttribute("width"), hole.getAttribute("height"));
-    assert.equal(hole.dataset.positionKnown, "false");
     assert.equal(a.doc.querySelector('[data-member-continuation="left"]'), null);
     assert.ok(a.get("#drawing").textContent.includes("有効長 E 未確定"));
     assert.equal(a.model().leftBoxPosition, "");
+    assert.equal(a.model().effective, "");
     assert.equal(a.get("#diagram-value").value, "");
     assert.equal(a.get("#print").disabled, true);
     assert.equal(a.get("#download-svg").disabled, true);
@@ -232,12 +247,93 @@ test("左箱穴の位置が未入力でも図形は58角に切り替わり、入
       JSON.parse(a.w.localStorage.getItem(workspaceKey)).current.model.leftBoxPosition,
       "",
     );
-    a.input("#diagram-value", "70");
+    a.input("#diagram-value", "235");
     assert.equal(a.get('#drawing [data-row="left-seat"]').dataset.positionKnown, "true");
     assert.ok(a.get("#drawing").textContent.includes("有効長 E 235"));
     assert.equal(a.get("#drawing").textContent.includes("柱 105角"), false);
+    assert.equal(a.get("#drawing").textContent.includes("左穴まで"), false);
+    a.mode("joint");
+    assert.equal(a.model().mode,"direct");
+    assert.equal(a.model().effective,"235");
     if (boltType) assert.equal(a.result().effective, 235);
   }
+});
+
+test("旧ボックス穴の作業データは計算済み有効長を引き継ぎ、移行前の原文を退避する", (t) => {
+  const calc = require("../js/calculator.js"), data = require("../data/defaults.json");
+  for (const rightSeat of ["box","recess"]) {
+    const source = Object.assign(calc.createModel(data), {boltType:"double",leftSeat:"box",rightSeat,leftBoxPosition:"70",candidate:"240",name:"移行確認",note:"メモ継承"});
+    const previous = calc.calculate(source,data);
+    const workspace = {version:1,current:{model:source,savedId:"existing"},history:[]};
+    const raw = JSON.stringify(workspace);
+    const a = setup(t,workspace);
+    assert.equal(a.model().mode,"direct");
+    assert.equal(a.model().effective,String(previous.effective));
+    assert.equal(a.result().effective,previous.effective);
+    assert.equal(a.result().required,previous.required);
+    assert.equal(a.result().selected,previous.selected);
+    assert.equal(a.model().candidate,"240");
+    assert.equal(a.model().name,source.name);
+    assert.equal(a.model().note,source.note);
+    assert.equal(a.doc.querySelector('#drawing [data-edit="leftBoxPosition"]'),null);
+    const recovery = Object.keys(a.w.localStorage).filter(key=>key.startsWith(workspaceKey+".recovery."));
+    assert.equal(recovery.length,1);
+    assert.equal(a.w.localStorage.getItem(recovery[0]),raw);
+    assert.equal(JSON.stringify(workspace),raw);
+  }
+  const oldSpec = Object.assign(calc.createModel(data), {specVersion:"2026-10-15-nut-engagement",boltType:"double",leftSeat:"box",leftBoxPosition:"70",leftProjection:"3",rightProjection:"3"});
+  const b = setup(t,{version:1,current:{model:oldSpec,savedId:null},history:[]});
+  assert.equal(b.result().effective,235);
+  assert.match(b.get("#notice-message").textContent,/新基準/);
+  assert.match(b.get("#notice-message").textContent,/有効長を直接入力へ/);
+});
+
+test("旧ボックス穴が未入力なら有効長も未入力とし、直接入力済みの値は変えない", (t) => {
+  const calc = require("../js/calculator.js"), data = require("../data/defaults.json");
+  const source = Object.assign(calc.createModel(data), {boltType:"double",leftSeat:"box"});
+  const a = setup(t,{version:1,current:{model:source,savedId:null},history:[]});
+  assert.equal(a.model().mode,"direct");
+  assert.equal(a.model().effective,"");
+  assert.equal(a.result().ok,false);
+  assert.equal(a.get("#result-selected").textContent,"--");
+  source.mode="direct";
+  source.effective="400.1";
+  const b = setup(t,{version:1,current:{model:source,savedId:null},history:[]});
+  assert.equal(b.model().effective,"400.1");
+  assert.equal(b.result().effective,400.1);
+  assert.equal(Object.keys(b.w.localStorage).filter(key=>key.startsWith(workspaceKey+".recovery.")).length,0);
+});
+
+test("退避できない場合も旧入力を画面へ復元し、元の作業データを上書きしない", (t) => {
+  const calc = require("../js/calculator.js"), data = require("../data/defaults.json");
+  const source = Object.assign(calc.createModel(data), {boltType:"double",leftSeat:"box",leftBoxPosition:"70"});
+  const workspace = {version:1,current:{model:source,savedId:null},history:[]};
+  const a = setup(t,workspace,1280,null,true);
+  assert.equal(a.result().effective,235);
+  assert.equal(a.model().mode,"direct");
+  assert.equal(a.w.localStorage.getItem(workspaceKey),JSON.stringify(workspace));
+  assert.match(a.get("#session-status").textContent,/自動保存できません/);
+});
+
+test("旧ボックス穴のJSONと名前付き保存も同じ有効長で開き、原本は変更しない", async (t) => {
+  const calc = require("../js/calculator.js"), data = require("../data/defaults.json");
+  const source = Object.assign(calc.createModel(data), {boltType:"double",leftSeat:"box",leftBoxPosition:"70"});
+  const document = calc.exportDocument(source,data,true);
+  const original = JSON.stringify(document);
+  const a = setup(t);
+  Object.defineProperty(a.get("#import-file"),"files",{configurable:true,value:[{name:"確認.json",size:original.length,text:async()=>original}]});
+  a.get("#import-file").dispatchEvent(new a.w.Event("change",{bubbles:true}));
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.equal(a.result().effective,235);
+  assert.equal(a.model().mode,"direct");
+  assert.equal(JSON.stringify(document),original);
+  const saved = JSON.stringify({version:1,items:[{id:"existing",savedAt:new Date().toISOString(),document}]});
+  a.w.localStorage.setItem("bolt-effective-length.saved.v1",saved);
+  a.click("#open-saved");
+  a.click('#saved-list button[title="開く"]');
+  assert.equal(a.result().effective,235);
+  assert.equal(a.model().mode,"direct");
+  assert.equal(a.w.localStorage.getItem("bolt-effective-length.saved.v1"),saved);
 });
 
 test("座金が未入力の途中でも穴の種類と座彫り側の輪郭を更新する", (t) => {
@@ -245,7 +341,7 @@ test("座金が未入力の途中でも穴の種類と座彫り側の輪郭を�
   a.type("double");
   a.open("leftSeat");
   a.change("#diagram-option", "box");
-  a.input("#diagram-value", "70");
+  a.input("#diagram-value", "235");
   a.open("washer-right");
   a.change("#diagram-option", "custom");
   assert.equal(a.result().ok, false);
@@ -254,12 +350,12 @@ test("座金が未入力の途中でも穴の種類と座彫り側の輪郭を�
   assert.ok(a.get('[data-member-continuation="left"]'));
   assert.ok(a.get("#drawing").textContent.includes("有効長 E 未確定"));
   assert.equal(a.model().washers.right.axial, "");
-  assert.equal(a.model().leftBoxPosition, "70");
+  assert.equal(a.model().leftBoxPosition, "");
   a.open("washer-right");
   a.input("#diagram-axial", "4.5");
   a.input("#diagram-outer", "39");
-  assert.equal(a.result().effective, 277);
-  assert.ok(a.get("#drawing").textContent.includes("有効長 E 277"));
+  assert.equal(a.result().effective, 235);
+  assert.ok(a.get("#drawing").textContent.includes("有効長 E 235"));
 });
 
 test("座金を図から選択し厚さを自動設定、その他の座金だけ実寸入力", (t) => {
@@ -675,18 +771,19 @@ test("柱・穴位置・詳細の値を上下ボタンで変更し、左右の�
   assert.equal(a.result().effective, 277);
   a.click("#close-diagram");
   a.change("#leftSeat", "box");
-  a.input("#leftBoxPosition", "70");
   a.change("#direction", "vertical");
-  a.open("leftBoxPosition");
+  a.open("effective");
+  a.input("#diagram-value", "235");
   step(a, "diagram-value", 1);
-  assert.equal(a.model().leftBoxPosition, "71");
-  assert.equal(a.result().effective, 234);
+  assert.equal(a.model().effective, "236");
+  assert.equal(a.result().effective, 236);
   a.click("#close-diagram");
-  step(a, "clearance", 1);
-  assert.equal(a.model().clearance, "200");
-  assert.equal(a.result().effective, 235);
+  assert.equal(a.doc.querySelector('#drawing [data-edit="leftBoxPosition"]'),null);
+  a.change("#leftSeat", "recess");
+  a.mode("joint");
+  assert.equal(a.result().effective,277);
   a.open("clearance");
-  assert.equal(a.get("#diagram-value").value, "200");
+  assert.equal(a.get("#diagram-value").value, "199");
 });
 
 test("空欄や不正な数値は上下ボタンで補完・丸めせず、手入力の訂正後に再開", (t) => {

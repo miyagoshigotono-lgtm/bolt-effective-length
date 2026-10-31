@@ -110,9 +110,18 @@
   }
   function replaceModel(next, id = null) {
     closeEditor(false);
+    useDirectLengthForBox(next, true);
     model = next;
     savedId = id;
     renderForm();
+  }
+  function useDirectLengthForBox(next, preserveCalculated = false) {
+    if (next.leftSeat !== "box" || next.mode !== "joint") return false;
+    const previous = preserveCalculated ? calc.calculate(next, data) : null;
+    next.mode = "direct";
+    // 新しく穴の種類を変えた場合は、以前の木部寸法を流用しない。
+    next.effective = previous?.ok ? calc.format(previous.effective) : "";
+    return true;
   }
   function restoreHistory(backward) {
     const source = backward ? past : future,
@@ -322,6 +331,7 @@
     refocus(focus);
   }
   function renderForm() {
+    useDirectLengthForBox(model);
     if (
       (editorKey === "effective" && model.mode !== "direct") ||
       (["column", "clearance", "leftBoxPosition"].includes(editorKey) &&
@@ -352,9 +362,11 @@
       document.querySelectorAll("[name=" + name + "]").forEach((el) => {
         el.checked = el.value === model[name];
       });
+    const jointMode = document.querySelector('[name="mode"][value="joint"]');
+    jointMode.disabled = model.leftSeat === "box";
+    jointMode.parentElement.title = jointMode.disabled ? "左がボックス穴のときは、有効長を直接入力します。" : "";
     $("direct-fields").hidden = model.mode !== "direct";
     $("joint-fields").hidden = model.mode !== "joint";
-    $("left-box-field").hidden = model.leftSeat !== "box";
     $("clearance-title").textContent =
       model.rightSeat === "box"
         ? "柱の右面から右の穴の内側まで"
@@ -431,6 +443,11 @@
       const initial = calc.createModel(data);
       initial.boltType = "double";
       lastDiagram = calc.calculate(initial, data);
+    }
+    if (!draft.ok && model.mode === "direct" && lastDiagram.geometry.column != null) {
+      // 未入力時の参考図も直接入力の形にし、柱や左穴位置の寸法を残さない。
+      const reference = calc.calculate({ ...clone(lastDiagram.input), mode: "direct", effective: calc.format(lastDiagram.effective) }, data);
+      if (reference.ok) lastDiagram = reference;
     }
     const chart = drawing.render(lastDiagram, data, {
       compact: true,
@@ -576,7 +593,6 @@
         model.rightSeat === "box"
           ? "柱から右の穴まで（内側）"
           : "柱から桁の右端まで",
-      leftBoxPosition: "左端から左の穴まで（内側）",
       effective: "有効長",
       leftSeat: "左の穴",
       rightSeat: "右の穴",
@@ -1127,13 +1143,10 @@
       };
       refreshEditorParts();
     } else model[editorKey] = event.target.value;
+    const askEffective = editorKey === "leftSeat" && useDirectLengthForBox(model);
     renderForm();
-    if (
-      editorKey === "leftSeat" &&
-      model.leftSeat === "box" &&
-      model.leftBoxPosition === ""
-    )
-      openEditor("leftBoxPosition");
+    if (askEffective)
+      openEditor("effective");
     else if (editorKey.endsWith("Seat"))
       $("diagram-part-size").textContent =
         model[editorKey] === "box" ? "58 × 58 mm" : "28 mm";
@@ -1190,6 +1203,10 @@
   );
   document.querySelectorAll("[name=mode]").forEach((el) =>
     el.addEventListener("change", () => {
+      if (el.value === "joint" && model.leftSeat === "box") {
+        renderForm();
+        return;
+      }
       if (el.value === "direct") {
         const current = result.ok
           ? result
@@ -1451,13 +1468,19 @@
           session.catalogVersions[type] !== data.catalogs[type].version
         )
           throw new Error("カタログ版が異なるため、自動適用しません。");
-        if (session.current.model.specVersion !== data.specVersion) {
+        const directBox = useDirectLengthForBox(restored, true);
+        if (session.current.model.specVersion !== data.specVersion || directBox) {
           pendingWorkspaceRecovery = raw;
-          localStorage.setItem(`${workspaceKey}.recovery.${Date.now()}`, raw);
-          pendingWorkspaceRecovery = null;
-          notify(
-            "新基準（かかり10 mm以上・飛び出し10 mmまで）で読み込みました。必要長と候補を確認してください。元の作業データも退避しています。",
-          );
+          try {
+            localStorage.setItem(`${workspaceKey}.recovery.${Date.now()}`, raw);
+            pendingWorkspaceRecovery = null;
+          } catch { /* 退避できるまではsaveWorkspace側でも元の原文を保護する。 */ }
+          const messages = [];
+          if (session.current.model.specVersion !== data.specVersion)
+            messages.push("新基準（かかり10 mm以上・飛び出し10 mmまで）で読み込みました。必要長と候補を確認してください。元の作業データも退避しています。");
+          if (directBox)
+            messages.push(restored.effective ? "左のボックス穴は、計算済みの有効長を直接入力へ引き継ぎました。" : "左のボックス穴は、有効長を直接入力してください。");
+          notify(messages.join(" "));
         }
         model = restored;
         savedId =

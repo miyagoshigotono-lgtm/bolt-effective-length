@@ -8,12 +8,12 @@
       content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"
     />
     <title>ボルト有効長</title>
-    <link rel="stylesheet" href="styles.css?v=20261031-3" />
+    <link rel="stylesheet" href="styles.css?v=20261031-4" />
     <script src="vendor/lucide.min.js" defer></script>
     <script src="js/defaults.js" defer></script>
     <script src="js/calculator.js" defer></script>
-    <script src="js/drawing.js?v=20261031-2" defer></script>
-    <script src="js/app.js?v=20261031-3" defer></script>
+    <script src="js/drawing.js?v=20261031-4" defer></script>
+    <script src="js/app.js?v=20261031-4" defer></script>
   </head>
   <body>
     <header class="app-header">
@@ -256,13 +256,7 @@
                     ><span class="unit">mm</span
                     ><input id="clearance" type="text" inputmode="decimal"
                   /></label>
-                  <label class="field" id="left-box-field" hidden
-                    >左端から左の穴まで<span class="unit">mm</span
-                    ><input
-                      id="leftBoxPosition"
-                      type="text"
-                      inputmode="decimal"
-                  /></label>
+                  <input id="leftBoxPosition" type="hidden" />
                 </div>
                 <div id="direct-fields" hidden>
                   <label class="field"
