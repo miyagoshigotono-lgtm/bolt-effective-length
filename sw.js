@@ -2,7 +2,7 @@
 importScripts("./js/site-assets.js");
 const SCOPE = self.registration.scope;
 const PREFIX = "wood-calculators:" + new URL(SCOPE).pathname + ":";
-const CACHE = PREFIX + "20261031-2";
+const CACHE = PREFIX + "20261031-3";
 self.addEventListener("install", (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
