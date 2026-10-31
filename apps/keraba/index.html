@@ -40,6 +40,14 @@
   .mode-tab{flex:1;font-size:17px;font-weight:700;padding:9px 12px;color:var(--sub);background:#fff}
   .mode-tab.is-active{color:#fff;background:var(--accent);border-color:var(--accent)}
   .mode-tab.is-active:hover{background:var(--accent2);border-color:var(--accent2)}
+  .file-tools{padding:9px 18px;border-bottom:1px solid var(--line);background:#f8fafc}
+  .file-buttons{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .file-buttons button{min-width:88px;font-weight:700}
+  .file-buttons a{margin-left:auto;color:var(--accent2);font-size:15px;font-weight:700}
+  .file-status{margin:6px 0 0;font-size:14px;line-height:1.4;overflow-wrap:anywhere}
+  .file-status:empty{display:none}
+  .file-status.is-error{color:#a51919;font-weight:700}
+  #btnUndoOpen{margin-top:6px;font-size:14px}
   .scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:13px 18px 39px}
 
   fieldset{border:1px solid var(--line);border-radius:6px;margin:0 0 18px;padding:13px 16px 16px;
@@ -158,6 +166,17 @@
     <div class="mode-tabs" role="tablist" aria-label="屋根材の種類">
       <button class="mode-tab is-active" id="tabNormal" type="button" role="tab" aria-selected="true">通常</button>
       <button class="mode-tab" id="tabTile" type="button" role="tab" aria-selected="false">瓦</button>
+    </div>
+
+    <div class="file-tools">
+      <div class="file-buttons">
+        <button id="btnSaveProject" type="button">保存</button>
+        <button id="btnOpenProject" type="button">開く</button>
+        <a href="https://github.com/miyagoshigotono-lgtm/keraba-project-data" target="_blank" rel="noopener noreferrer" title="GitHubの非公開保存先を開く">共有データ</a>
+      </div>
+      <input id="projectFile" type="file" accept=".json,application/json" hidden aria-label="ケラバの保存ファイル">
+      <p id="fileStatus" class="file-status" role="status" aria-live="polite"></p>
+      <button id="btnUndoOpen" type="button" hidden>読み込み前に戻す</button>
     </div>
 
     <div class="scroll" id="form">
@@ -480,6 +499,106 @@ function loadSavedForm(mode){
 
 function saveCurrentForm(){
   try{ localStorage.setItem(STORAGE_KEYS[activeMode], JSON.stringify(readForm())); }catch(e){}
+}
+
+/* ---- ケラバの入力を持ち運ぶJSONファイル ---- */
+const PROJECT_FORMAT = 'keraba-project';
+const PROJECT_VERSION = 1;
+const PROJECT_MAX_BYTES = 1024 * 1024;
+let fileImportBackup = null;
+
+function createProjectDocument(){
+  // 計算結果は保存せず、読み込み時に入力から図・発注書を作り直す。
+  return {format:PROJECT_FORMAT, version:PROJECT_VERSION, roofMode:activeMode,
+          savedAt:new Date().toISOString(), inputs:readForm()};
+}
+
+function parseProjectDocument(text){
+  if(typeof text!=='string' || text.length>PROJECT_MAX_BYTES)
+    throw new Error('保存ファイルは1 MB以内にしてください。');
+  let doc;
+  try{ doc=JSON.parse(text.replace(/^\uFEFF/,'')); }
+  catch(e){ throw new Error('JSONを読み取れません。ケラバで保存したファイルを選んでください。'); }
+  if(!doc || Array.isArray(doc) || doc.format!==PROJECT_FORMAT || doc.version!==PROJECT_VERSION)
+    throw new Error('この形式は開けません。ケラバで保存したJSONファイルを選んでください。');
+  if(!['normal','tile'].includes(doc.roofMode) || !doc.inputs || typeof doc.inputs!=='object' || Array.isArray(doc.inputs))
+    throw new Error('保存ファイルの屋根種類または入力が正しくありません。');
+  const fields=Object.keys(FIELDS).filter(key=>document.getElementById(key));
+  if(Object.keys(doc.inputs).some(key=>!fields.includes(key)) || fields.some(key=>!Object.prototype.hasOwnProperty.call(doc.inputs,key)))
+    throw new Error('保存ファイルの入力項目が一致しません。入力は変更していません。');
+  const inputs={};
+  for(const key of fields){
+    const value=doc.inputs[key], type=FIELDS[key], el=document.getElementById(key);
+    const valid=type==='num' ? value===null || (typeof value==='number' && Number.isFinite(value) && Math.abs(value)<=Number.MAX_SAFE_INTEGER)
+                : type==='bool' ? typeof value==='boolean' : typeof value==='string';
+    if(!valid || (typeof value==='string' && value.length>10000))
+      throw new Error('保存ファイルに正しくない入力値があります。入力は変更していません。');
+    if(el.tagName==='SELECT' && !Array.from(el.options).some(option=>option.value===value))
+      throw new Error('保存ファイルに選べない条件があります。入力は変更していません。');
+    if(el.type==='range' && (value===null || value<Number(el.min) || value>Number(el.max) || (value-Number(el.min))%Number(el.step)!==0))
+      throw new Error('保存ファイルのスケール値が正しくありません。入力は変更していません。');
+    const probe=el.cloneNode(true);
+    if(type!=='bool'){
+      probe.value=value===null?'':String(value);
+      const restored=type==='num' ? (probe.value===''?null:Number(probe.value)) : probe.value;
+      if(restored!==value) throw new Error('入力欄で扱えない値があります。入力は変更していません。');
+    }
+    inputs[key]=value;
+  }
+  return {roofMode:doc.roofMode, inputs};
+}
+
+function projectFileName(){
+  const name=($('name').value.trim() || '未命名').replace(/[<>:"/\\|?*\u0000-\u001f]/g,'_').replace(/[. ]+$/,'').slice(0,80);
+  return 'ケラバ_'+name+'_'+(activeMode==='tile'?'瓦':'通常')+'.json';
+}
+
+function showFileStatus(message, error=false){
+  $('fileStatus').textContent=message;
+  $('fileStatus').classList.toggle('is-error',error);
+}
+
+function saveProjectFile(){
+  const name=projectFileName(), text=JSON.stringify(createProjectDocument(),null,2)+'\n';
+  try{
+    const url=URL.createObjectURL(new Blob([text],{type:'application/json;charset=utf-8'}));
+    const link=document.createElement('a');
+    link.href=url; link.download=name; document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    showFileStatus(name+' を書き出しました。');
+  }catch(error){
+    showFileStatus('書き出せませんでした。入力は残っています。もう一度保存してください。',true);
+  }
+}
+
+function openProjectText(text, fileName){
+  // 検証をすべて終えてから入力を置き換え、直前の両モードの入力も戻せるようにする。
+  const doc=parseProjectDocument(text);
+  const backup={mode:activeMode, inputs:readForm(), stored:{}};
+  for(const key of [...Object.values(STORAGE_KEYS),TILE_PLYWOOD_DEFAULTS_KEY]){
+    try{ backup.stored[key]=localStorage.getItem(key); }catch(e){}
+  }
+  selectMode(doc.roofMode);
+  writeForm(doc.inputs);
+  $('ackWarning').checked=false;
+  refresh();
+  fileImportBackup=backup;
+  $('btnUndoOpen').hidden=false;
+  showFileStatus(fileName+' を開きました（'+(doc.roofMode==='tile'?'瓦':'通常')+'）。');
+}
+
+function undoProjectOpen(){
+  if(!fileImportBackup) return;
+  const backup=fileImportBackup;
+  for(const [key,value] of Object.entries(backup.stored)){
+    try{ if(value===null) localStorage.removeItem(key); else localStorage.setItem(key,value); }catch(e){}
+  }
+  showRoofMode(backup.mode);
+  writeForm(backup.inputs);
+  refresh();
+  fileImportBackup=null;
+  $('btnUndoOpen').hidden=true;
+  showFileStatus('読み込み前の入力に戻しました。');
 }
 
 /* =========================================================
@@ -1483,22 +1602,42 @@ $('btnPrintDwg').onclick  = ()=> doPrint('dwg');
 $('btnPrintOrd').onclick  = ()=> doPrint('ord');
 $('btnPrintBoth').onclick = ()=> doPrint('both');
 
-function selectMode(mode){
-  if(mode===activeMode) return;
-  saveCurrentForm();
+function showRoofMode(mode){
   activeMode = mode;
   $('ackWarning').checked=false;
   document.body.classList.toggle('tile-mode', mode==='tile');
-  writeForm(loadSavedForm(mode));
   $('tabNormal').classList.toggle('is-active', mode==='normal');
   $('tabTile').classList.toggle('is-active', mode==='tile');
   $('tabNormal').setAttribute('aria-selected', String(mode==='normal'));
   $('tabTile').setAttribute('aria-selected', String(mode==='tile'));
+}
+
+function selectMode(mode){
+  if(mode===activeMode) return;
+  saveCurrentForm();
+  showRoofMode(mode);
+  writeForm(loadSavedForm(mode));
   refresh();
 }
 
 $('tabNormal').onclick = ()=> selectMode('normal');
 $('tabTile').onclick = ()=> selectMode('tile');
+$('btnSaveProject').onclick = saveProjectFile;
+$('btnOpenProject').onclick = ()=>{ $('projectFile').value=''; $('projectFile').click(); };
+$('btnUndoOpen').onclick = undoProjectOpen;
+$('projectFile').onchange = ()=>{
+  const file=$('projectFile').files[0];
+  if(!file) return;
+  if(file.size>PROJECT_MAX_BYTES){ showFileStatus('保存ファイルは1 MB以内にしてください。',true); return; }
+  const reader=new FileReader();
+  reader.onload=()=>{
+    try{ openProjectText(reader.result,file.name); }
+    catch(error){ showFileStatus(error.message,true); }
+    $('projectFile').value='';
+  };
+  reader.onerror=()=>showFileStatus('ファイルを読み取れませんでした。入力は変更していません。',true);
+  reader.readAsText(file,'UTF-8');
+};
 
 $('btnReset').onclick = ()=>{
   if(!confirm('入力を既定値に戻します。よろしいですか？')) return;
@@ -1521,7 +1660,7 @@ $('btnReset').onclick = ()=>{
   if(!ok){
     const b=document.getElementById('updBar');
     b.style.background='#ffe6e6'; b.style.borderColor='#e0a0a0'; b.style.color='#8a2020';
-    b.textContent='このブラウザでは入力内容を保存できません（サーバー経由で開いてください）';
+    b.textContent='このブラウザでは自動保存できません。「保存」でJSONファイルを残してください。';
     b.style.display='block';
   }
 })();
