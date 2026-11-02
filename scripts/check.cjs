@@ -11,7 +11,7 @@ const commands = [
     "js/app.js",
     "js/suite.js",
     "js/site-assets.js",
-    "apps/keraba/github-store.js",
+    "apps/keraba/cloud-store.js",
     "apps/keraba/cloud-ui.js",
     "sw.js",
     "scripts/build-data.cjs",
