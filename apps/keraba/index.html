@@ -55,6 +55,18 @@
   #projectSaveName{display:block;width:100%;margin-top:7px;font-size:19px}
   #projectSaveError{color:#a51919;font-size:15px}
   .project-save-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}
+  .cloud-dialog{width:560px;max-width:94vw;max-height:90vh;border:1px solid var(--line);border-radius:8px;padding:22px;overflow:auto}
+  .cloud-dialog::backdrop{background:#1c243050}
+  .cloud-dialog h2{margin:0 0 18px;font-size:21px}
+  .cloud-dialog p,.cloud-dialog label,.cloud-dialog li{font-size:16px;line-height:1.6}
+  .cloud-dialog a{color:var(--accent2)}
+  .cloud-dialog .project-save-actions{flex-wrap:wrap}
+  .cloud-dialog input[type="text"],.cloud-dialog input[type="password"]{display:block;width:100%;margin-top:7px;font-size:18px}
+  .cloud-error{color:#a51919}
+  #cloudProjectList{display:grid;gap:8px;margin:14px 0;max-height:42vh;overflow:auto}
+  #cloudProjectList button{text-align:left;font-size:18px;overflow-wrap:anywhere;padding:12px}
+  #projectSaveOverwrite{font-size:16px;color:#8a4300}
+  [hidden]{display:none!important}
   .scroll{flex:1;overflow-y:auto;overflow-x:hidden;padding:13px 18px 39px}
 
   fieldset{border:1px solid var(--line);border-radius:6px;margin:0 0 18px;padding:13px 16px 16px;
@@ -142,6 +154,7 @@
 
   /* ---------- 印刷 ---------- */
   @media print{
+    dialog,dialog::backdrop{display:none!important}
     html,body{background:#fff;height:auto;overflow:visible}
     .app{display:block;height:auto;overflow:visible}
     .side,.toolbar{display:none!important}
@@ -179,7 +192,7 @@
       <div class="file-buttons">
         <button id="btnSaveProject" type="button">保存</button>
         <button id="btnOpenProject" type="button">開く</button>
-        <a href="https://github.com/miyagoshigotono-lgtm/keraba-project-data" target="_blank" rel="noopener noreferrer" title="GitHubの非公開保存先を開く">共有データ</a>
+        <button id="btnGitHubConnect" type="button">GitHub接続</button>
       </div>
       <input id="projectFile" type="file" accept=".json,application/json" hidden aria-label="ケラバの保存ファイル">
       <p id="fileStatus" class="file-status" role="status" aria-live="polite"></p>
@@ -390,9 +403,40 @@
     <h2 id="projectSaveTitle">保存名を確認</h2>
     <label>保存名<input id="projectSaveName" type="text" maxlength="120" required autocomplete="off"></label>
     <p id="projectSaveError" role="alert"></p>
+    <label id="projectSaveOverwrite" hidden><input id="projectSaveOverwriteCheck" type="checkbox"> 同じ名前のデータを上書きする</label>
     <div class="project-save-actions">
       <button id="projectSaveCancel" type="button">キャンセル</button>
-      <button type="submit" class="primary">この名前で保存</button>
+      <button id="projectSaveSubmit" type="submit" class="primary">この名前で保存</button>
+    </div>
+  </form>
+</dialog>
+<dialog id="cloudOpenDialog" class="cloud-dialog" aria-labelledby="cloudOpenTitle">
+  <h2 id="cloudOpenTitle">クラウドから開く</h2>
+  <label>保存名で探す<input id="cloudSearch" type="text" autocomplete="off"></label>
+  <p id="cloudOpenStatus" role="status" aria-live="polite"></p>
+  <div id="cloudProjectList" aria-label="GitHubの保存一覧"></div>
+  <div class="project-save-actions">
+    <button id="cloudImportLegacy" type="button">以前のJSONを取り込む</button>
+    <button id="cloudRefresh" type="button">一覧を更新</button>
+    <button id="cloudOpenClose" type="button">閉じる</button>
+  </div>
+</dialog>
+<dialog id="cloudConnectDialog" class="cloud-dialog" aria-labelledby="cloudConnectTitle">
+  <form id="cloudConnectForm">
+    <h2 id="cloudConnectTitle">GitHub接続</h2>
+    <p>保存用の接続キーを登録します。このタブを閉じるまで接続を保ちます。読み出しだけなら接続は不要です。</p>
+    <ol>
+      <li><a href="https://github.com/settings/personal-access-tokens/new?name=Keraba%20cloud&amp;target_name=miyagoshigotono-lgtm&amp;contents=write&amp;expires_in=90" target="_blank" rel="noopener noreferrer">GitHubで接続キーを作る</a></li>
+      <li>Only select repositories で <b>keraba-project-data</b> を選び、Contents を <b>Read and write</b> にして発行。</li>
+      <li>発行されたキーを下に貼り付け。</li>
+    </ol>
+    <label>接続キー<input id="cloudToken" type="password" autocomplete="off" spellcheck="false" required></label>
+    <p id="cloudConnectError" class="cloud-error" role="alert"></p>
+    <p><a href="https://github.com/miyagoshigotono-lgtm/keraba-project-data" target="_blank" rel="noopener noreferrer">GitHubの保存先を見る</a></p>
+    <div class="project-save-actions">
+      <button id="cloudDisconnect" type="button" hidden>接続を解除</button>
+      <button id="cloudConnectCancel" type="button">閉じる</button>
+      <button id="cloudConnectSubmit" type="submit" class="primary">接続する</button>
     </div>
   </form>
 </dialog>
@@ -519,12 +563,13 @@ function saveCurrentForm(){
   try{ localStorage.setItem(STORAGE_KEYS[activeMode], JSON.stringify(readForm())); }catch(e){}
 }
 
-/* ---- ケラバの入力を持ち運ぶJSONファイル ---- */
+/* ---- ケラバのクラウド保存と旧JSONの読み込み ---- */
 const PROJECT_FORMAT = 'keraba-project';
 const PROJECT_VERSION = 1;
 const PROJECT_MAX_BYTES = 1024 * 1024;
 let fileImportBackup = null;
 const projectSaveNames = {normal:'',tile:''};
+const projectCloudRecords = {normal:null,tile:null};
 
 function createProjectDocument(){
   // 計算結果は保存せず、読み込み時に入力から図・発注書を作り直す。
@@ -577,23 +622,11 @@ function showFileStatus(message, error=false){
   $('fileStatus').classList.toggle('is-error',error);
 }
 
-function saveProjectFile(name=projectFileName()){
-  const text=JSON.stringify(createProjectDocument(),null,2)+'\n';
-  try{
-    const url=URL.createObjectURL(new Blob([text],{type:'application/json;charset=utf-8'}));
-    const link=document.createElement('a');
-    link.href=url; link.download=name; document.body.appendChild(link); link.click(); link.remove();
-    setTimeout(()=>URL.revokeObjectURL(url),1000);
-    showFileStatus(name+' を書き出しました。');
-  }catch(error){
-    showFileStatus('書き出せませんでした。入力は残っています。もう一度保存してください。',true);
-  }
-}
-
 function openProjectText(text, fileName){
   // 検証をすべて終えてから入力を置き換え、直前の両モードの入力も戻せるようにする。
   const doc=parseProjectDocument(text);
-  const backup={mode:activeMode, inputs:readForm(), stored:{}};
+  const backup={mode:activeMode, inputs:readForm(), stored:{},
+    cloud:{...projectCloudRecords}, names:{...projectSaveNames}};
   for(const key of [...Object.values(STORAGE_KEYS),TILE_PLYWOOD_DEFAULTS_KEY]){
     try{ backup.stored[key]=localStorage.getItem(key); }catch(e){}
   }
@@ -601,6 +634,8 @@ function openProjectText(text, fileName){
   writeForm(doc.inputs);
   $('ackWarning').checked=false;
   refresh();
+  projectCloudRecords[doc.roofMode]=null;
+  projectSaveNames[doc.roofMode]=fileName.replace(/\.json$/i,'');
   fileImportBackup=backup;
   $('btnUndoOpen').hidden=false;
   showFileStatus(fileName+' を開きました（'+(doc.roofMode==='tile'?'瓦':'通常')+'）。');
@@ -615,6 +650,8 @@ function undoProjectOpen(){
   showRoofMode(backup.mode);
   writeForm(backup.inputs);
   refresh();
+  Object.assign(projectCloudRecords,backup.cloud);
+  Object.assign(projectSaveNames,backup.names);
   fileImportBackup=null;
   $('btnUndoOpen').hidden=true;
   showFileStatus('読み込み前の入力に戻しました。');
@@ -1641,28 +1678,6 @@ function selectMode(mode){
 
 $('tabNormal').onclick = ()=> selectMode('normal');
 $('tabTile').onclick = ()=> selectMode('tile');
-$('btnSaveProject').onclick = ()=>{
-  if($('projectSaveDialog').open) return;
-  $('projectSaveName').value=projectSaveNames[activeMode] || projectFileName().replace(/\.json$/i,'');
-  $('projectSaveError').textContent='';
-  $('projectSaveDialog').showModal();
-  $('projectSaveName').focus();
-  $('projectSaveName').select();
-};
-$('projectSaveCancel').onclick = ()=>$('projectSaveDialog').close();
-$('projectSaveForm').onsubmit = event=>{
-  event.preventDefault();
-  const name=$('projectSaveName').value.trim().replace(/\.json$/i,'');
-  if(!name || /[<>:"/\\|?*\u0000-\u001f]/.test(name) || /[. ]$/.test(name) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(name)){
-    $('projectSaveError').textContent='保存名を入力してください。記号 \\ / : * ? " < > | は使えません。';
-    $('projectSaveName').focus();
-    return;
-  }
-  projectSaveNames[activeMode]=name;
-  saveProjectFile(name+'.json');
-  $('projectSaveDialog').close();
-};
-$('btnOpenProject').onclick = ()=>{ $('projectFile').value=''; $('projectFile').click(); };
 $('btnUndoOpen').onclick = undoProjectOpen;
 $('projectFile').onchange = ()=>{
   const file=$('projectFile').files[0];
@@ -1682,6 +1697,8 @@ $('btnReset').onclick = ()=>{
   if(!confirm('入力を既定値に戻します。よろしいですか？')) return;
   try{ localStorage.removeItem(STORAGE_KEYS[activeMode]); }catch(e){}
   $('ackWarning').checked=false;
+  projectCloudRecords[activeMode]=null;
+  projectSaveNames[activeMode]='';
   writeForm(loadSavedForm(activeMode));
   refresh();
 };
@@ -1699,7 +1716,7 @@ $('btnReset').onclick = ()=>{
   if(!ok){
     const b=document.getElementById('updBar');
     b.style.background='#ffe6e6'; b.style.borderColor='#e0a0a0'; b.style.color='#8a2020';
-    b.textContent='このブラウザでは自動保存できません。「保存」でJSONファイルを残してください。';
+    b.textContent='このブラウザでは途中入力を自動保存できません。「保存」でクラウドへ保存してください。';
     b.style.display='block';
   }
 })();
@@ -1773,5 +1790,7 @@ checkUpdate();
 setInterval(checkUpdate, 3*60*1000);
 window.addEventListener('focus', checkUpdate);
 </script>
+<script src="github-store.js?v=20261102-1"></script>
+<script src="cloud-ui.js?v=20261102-1"></script>
 </body>
 </html>
