@@ -8,7 +8,7 @@
       content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"
     />
     <title>ボルト有効長</title>
-    <link rel="stylesheet" href="styles.css?v=20261031-4" />
+    <link rel="stylesheet" href="styles.css?v=20261102-5" />
     <script src="vendor/lucide.min.js" defer></script>
     <script src="js/defaults.js" defer></script>
     <script src="js/calculator.js" defer></script>
@@ -16,67 +16,72 @@
     <script src="js/app.js?v=20261031-4" defer></script>
   </head>
   <body>
-    <header class="app-header">
-      <div class="brand">
-        <i data-lucide="ruler" aria-hidden="true"></i>
-        <h1>ボルト有効長</h1>
-        <span class="local-label">M12</span>
-      </div>
-      <nav class="joint-tabs" role="tablist" aria-label="木組みの設定">
-        <button id="joint-tab-input" type="button" role="tab" aria-controls="joint-input-panel" aria-selected="true">条件入力</button>
-        <button id="joint-tab-pattern" type="button" role="tab" aria-controls="joint-pattern-panel" aria-selected="false" tabindex="-1">パターン</button>
-      </nav>
-      <nav class="actions" aria-label="ファイル操作">
-        <button type="button" id="undo" title="元に戻す" aria-label="元に戻す">
-          <i data-lucide="undo-2"></i>
-        </button>
-        <button type="button" id="redo" title="やり直す" aria-label="やり直す">
-          <i data-lucide="redo-2"></i>
-        </button>
-        <button type="button" id="open-saved" title="保存した構成">
-          <i data-lucide="folder-open"></i><span>保存済み</span>
-        </button>
-        <button type="button" id="save" title="この端末に保存">
-          <i data-lucide="save"></i><span>保存</span>
-        </button>
-        <button
-          type="button"
-          id="save-as"
-          title="別の構成として保存"
-          aria-label="別の構成として保存"
-        >
-          <i data-lucide="save-all"></i>
-        </button>
-        <button type="button" id="import" title="JSONを読み込む">
-          <i data-lucide="upload"></i>
-        </button>
-        <button type="button" id="export" title="JSONを書き出す">
-          <i data-lucide="download"></i>
-        </button>
-        <button type="button" id="print" title="印刷・PDF保存">
-          <i data-lucide="printer"></i>
-        </button>
-        <button type="button" id="reset" title="条件をリセット">
-          <i data-lucide="rotate-ccw"></i>
-        </button>
-      </nav>
-    </header>
-    <div id="notice" role="status" hidden>
-      <span id="notice-message"></span>
-      <button
-        id="dismiss-notice"
-        type="button"
-        title="通知を閉じる"
-        aria-label="通知を閉じる"
-      >
-        <i data-lucide="x"></i>
-      </button>
-    </div>
-    <div class="session-bar">
-      <span id="session-status"></span><a href="#result-section">結果</a
-      ><a href="#catalog-section">カタログ候補</a>
-    </div>
     <main class="workspace">
+      <header class="app-header">
+        <div class="title-row">
+          <div class="brand">
+            <h1>ボルト有効長</h1>
+            <span class="local-label">M12</span>
+          </div>
+          <nav class="history-actions" aria-label="入力の履歴">
+            <button type="button" id="undo" title="元に戻す" aria-label="元に戻す">
+              <i data-lucide="undo-2"></i>
+            </button>
+            <button type="button" id="redo" title="やり直す" aria-label="やり直す">
+              <i data-lucide="redo-2"></i>
+            </button>
+          </nav>
+        </div>
+        <nav class="joint-tabs" role="tablist" aria-label="木組みの設定">
+          <button id="joint-tab-input" type="button" role="tab" aria-controls="joint-input-panel" aria-selected="true">条件入力</button>
+          <button id="joint-tab-pattern" type="button" role="tab" aria-controls="joint-pattern-panel" aria-selected="false" tabindex="-1">パターン</button>
+        </nav>
+        <div class="file-tools">
+          <nav class="file-buttons" aria-label="ファイル操作">
+            <button type="button" id="save" title="この端末に保存">
+              保存
+            </button>
+            <button type="button" id="open-saved" title="この端末に保存した構成を開く">
+              開く
+            </button>
+            <button type="button" id="reset" title="条件をリセット">
+              リセット
+            </button>
+          </nav>
+          <nav class="secondary-actions" aria-label="その他の保存操作">
+            <button
+              type="button"
+              id="save-as"
+              title="別の構成として保存"
+              aria-label="別の構成として保存"
+            >
+              別名保存
+            </button>
+            <button type="button" id="import" title="JSONを読み込む">
+              JSON読込
+            </button>
+            <button type="button" id="export" title="JSONを書き出す">
+              JSON書出
+            </button>
+          </nav>
+          <div class="session-bar">
+            <span id="session-status" role="status"></span>
+            <a href="#result-section">結果</a>
+            <a href="#catalog-section">カタログ候補</a>
+          </div>
+        </div>
+      </header>
+      <div id="notice" role="status" hidden>
+        <span id="notice-message"></span>
+        <button
+          id="dismiss-notice"
+          type="button"
+          title="通知を閉じる"
+          aria-label="通知を閉じる"
+        >
+          <i data-lucide="x"></i>
+        </button>
+      </div>
       <aside class="input-pane" id="input-pane" aria-label="ボルトと入力方法">
         <div id="joint-input-panel" role="tabpanel" aria-labelledby="joint-tab-input">
         <fieldset class="bolt-choice">
@@ -159,6 +164,9 @@
             <h2>接合図</h2>
             <span id="diagram-state" role="status"></span>
             <div class="drawing-actions">
+              <button type="button" id="print" title="印刷・PDF保存">
+                <i data-lucide="printer" aria-hidden="true"></i><span>印刷・PDF</span>
+              </button>
               <label class="drawing-direction"
                 >向き<select id="direction">
                   <option value="horizontal">横</option>
