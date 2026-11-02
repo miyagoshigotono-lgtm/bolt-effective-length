@@ -11,6 +11,6 @@
     "data/defaults.json", "vendor/lucide.min.js", "vendor/lucide-LICENSE.txt",
     "通常の有効長初期値.pdf", "サンプル.pdf", "有効長を見るための座金やナットなど.pdf",
     "サンプル２.png", "ダウンロード.png", "CAD画面の断面図.png", "仕様.md",
-    "apps/keraba/index.html", "apps/keraba/icon-192.png", "apps/keraba/github-store.js", "apps/keraba/cloud-ui.js", "apps/kebiki/index.html",
+    "apps/keraba/index.html", "apps/keraba/icon-192.png", "apps/keraba/cloud-store.js", "apps/keraba/cloud-ui.js", "apps/kebiki/index.html",
   ];
 });

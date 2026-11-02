@@ -10,3 +10,4 @@ tests/dom-runtime/
 .env.*
 !.env.example
 *.log
+/.cloud-service/
