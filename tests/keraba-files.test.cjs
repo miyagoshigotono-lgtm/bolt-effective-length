@@ -19,7 +19,8 @@ function cloud() {
     const path = key(body.name, owner), previous = files.get(path);
     if (body.action === 'list') return Response.json({ items: [...files].filter(([path]) => path.startsWith(owner + ':')).map(([path, file]) => ({ path: path.slice(65), name: path.slice(65), sha: file.sha })) });
     if (body.action === 'save') {
-      if ((previous ? Number(previous.sha) : null) !== body.revision) return new Response('', { status: 409 });
+      if ((previous ? Number(previous.sha) : null) !== body.revision) return Response.json(
+        body.revision===null && previous ? {existingRevision:previous.sha} : {}, {status:409});
       const file = { sha: String(++revision), text: JSON.stringify(body.document) };
       files.set(path, file);
       return Response.json({ path: body.name, sha: file.sha });
@@ -267,7 +268,8 @@ test('同じ名前の未読データは確認なしで置き換えず、確認�
   a.get('projectSaveName').value = '既存データ';
   await submit(a, 'projectSaveForm');
   assert.equal(a.get('projectSaveOverwrite').hidden, false);
-  assert.equal(remote.calls.filter(call => JSON.parse(call.options.body).action === 'save').length, 0);
+  assert.equal(remote.calls.filter(call => JSON.parse(call.options.body).action === 'save').length, 1);
+  assert.equal(JSON.parse(remote.file('既存データ').text).inputs.pitch,8.5);
   const newer = { ...doc, inputs: { ...doc.inputs, pitch: 6.5 } };
   remote.put('既存データ', newer);
   a.get('projectSaveOverwriteCheck').checked = true;
@@ -359,7 +361,7 @@ test('同名への明示的な上書き確認で更新し、保存通信中の�
   const remote = cloud();
   let release;
   const a = keraba(t, { fetcher: async (url, options) => {
-    if (JSON.parse(options.body).action === 'save') await new Promise(resolve => { release = resolve; });
+    if (JSON.parse(options.body).action === 'save' && JSON.parse(options.body).revision!==null) await new Promise(resolve => { release = resolve; });
     return remote.fetcher(url, options);
   } });
   remote.put('上書き検証', a.doc());
@@ -446,4 +448,16 @@ test('空欄から必要な寸法を入力すると図を再開し、入力値�
   assert.ok(!a.get('sheet').textContent.includes('必要な寸法を入力'));
   assert.equal(a.get('moyaSize').value,'120');assert.equal(a.get('normalHafuHeight').value,'180');
   assert.equal(a.get('btnPrintDwg').disabled,false);
+});
+
+test('新しい名前への保存は事前読込をせず1回の通信で完了し、同名の確認も追加読込をしない',async t=>{
+  const remote=cloud(),a=keraba(t,{fetcher:remote.fetcher});
+  a.get('btnSaveProject').click();a.get('projectSaveName').value='通信回数確認';await submit(a,'projectSaveForm');
+  assert.deepEqual(remote.calls.map(call=>JSON.parse(call.options.body).action),['save']);
+  const b=keraba(t,{fetcher:remote.fetcher});b.get('btnSaveProject').click();b.get('projectSaveName').value='通信回数確認';
+  await submit(b,'projectSaveForm');assert.equal(b.get('projectSaveOverwrite').hidden,false);
+  assert.deepEqual(remote.calls.map(call=>JSON.parse(call.options.body).action),['save','save']);
+  b.get('projectSaveOverwriteCheck').checked=true;await submit(b,'projectSaveForm');
+  assert.deepEqual(remote.calls.map(call=>JSON.parse(call.options.body).action),['save','save','save']);
+  assert.equal(b.get('projectSaveDialog').open,false);
 });

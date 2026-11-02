@@ -44,7 +44,13 @@
         });
         if (missing && response.status === 404) return null;
         if (!response.ok) {
-          if (response.status === 409) throw new Error('別の画面で更新されているか、同じ保存名があります。開き直すか、別の名前で保存してください。');
+          if (response.status === 409) {
+            const error=new Error('別の画面で更新されているか、同じ保存名があります。開き直すか、別の名前で保存してください。');
+            error.status=409;
+            const detail=await response.json().catch(()=>null);
+            if(/^[1-9]\d*$/.test(detail?.existingRevision || '') && Number.isSafeInteger(Number(detail.existingRevision))) error.existingSha=detail.existingRevision;
+            throw error;
+          }
           if (response.status === 413) throw new Error('保存データは1 MB以内にしてください。');
           throw new Error('クラウドとの通信に失敗しました。入力は残っています。少し待ってからやり直してください。');
         }

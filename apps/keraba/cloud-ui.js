@@ -57,23 +57,16 @@
     catch (error) { $('projectSaveError').textContent = error.message; $('projectSaveName').focus(); return; }
     const doc = createProjectDocument(), mode = doc.roofMode;
     const record = projectCloudRecords[mode];
+    const knownRecord=record?.path===path;
+    const sha=knownRecord ? record.sha : overwrite?.path===path ? overwrite.sha : undefined;
+    if(overwrite?.path===path && !$('projectSaveOverwriteCheck').checked){
+      $('projectSaveError').textContent='同じ名前のデータがあります。上書きするか、保存名を変えてください。';
+      return;
+    }
     setBusy(true);
     $('projectSaveError').textContent = 'クラウドへ保存しています…';
     try {
-      let sha;
-      if (record?.path === path) sha = record.sha;
-      else {
-        if (overwrite?.path !== path) {
-          const existing = await store.read(path, true);
-          overwrite = existing ? { path, sha: existing.sha } : null;
-        }
-        if (overwrite && !$('projectSaveOverwriteCheck').checked) {
-          $('projectSaveOverwrite').hidden = false;
-          $('projectSaveError').textContent = '同じ名前のデータがあります。上書きするか、保存名を変えてください。';
-          return;
-        }
-        sha = overwrite?.sha;
-      }
+      // 新規保存は事前の読み出しをせず、サーバーの原子的な登録で重複を判定する。
       const saved = await store.save(path, JSON.stringify(doc, null, 2) + '\n', sha);
       projectCloudRecords[mode] = saved;
       projectSaveNames[mode] = name;
@@ -82,6 +75,12 @@
       const changed = inputSignature() !== JSON.stringify({ roofMode: doc.roofMode, inputs: doc.inputs });
       showFileStatus(name + ' を保存しました。' + (changed ? '保存中に変更した入力は、もう一度保存してください。' : ''));
     } catch (error) {
+      if(!knownRecord && !sha && error.status===409 && error.existingSha){
+        overwrite={path,sha:error.existingSha};
+        $('projectSaveOverwrite').hidden=false;
+        $('projectSaveError').textContent='同じ名前のデータがあります。上書きするか、保存名を変えてください。';
+        return;
+      }
       $('projectSaveError').textContent = error.message;
       showFileStatus(error.message, true);
     } finally { setBusy(false); }
