@@ -67,16 +67,22 @@ test("不正な画面指定・保存不能でも外部URLを開かず、旧寸�
   assert.ok(b.frame("bolt").src.endsWith("#drawing"));
 });
 
-function kebiki(t, saved = null) {
+function kebiki(t, saved = null, blocked = false) {
+  const errors=[];
+  const console=new VirtualConsole();
+  console.on('jsdomError',error=>errors.push(error.message));
   const dom = new JSDOM(read("apps/kebiki/index.html"), {
-    url: "https://example.test/tools/apps/kebiki/", runScripts: "dangerously",
+    url: "https://example.test/tools/apps/kebiki/", runScripts: "dangerously", virtualConsole:console,
     beforeParse(w) {
       w.localStorage.setItem("bolt-proof", "keep");
       w.localStorage.setItem("keraba-proof", "keep");
       if (saved != null) w.localStorage.setItem("kebiki-line.input.v1", saved);
+      w.HTMLDialogElement.prototype.showModal=function(){this.setAttribute('open','');};
+      w.HTMLDialogElement.prototype.close=function(){this.removeAttribute('open');};
+      if(blocked)Object.defineProperty(w,'localStorage',{get(){throw new Error('保存不可');}});
     },
   });
-  t.after(() => dom.window.close());
+  t.after(() => {assert.deepEqual(errors,[]);dom.window.close();});
   const get = (id) => dom.window.document.getElementById(id);
   return { w: dom.window, get, change(id, value) { get(id).value = value; get(id).dispatchEvent(new dom.window.Event("input", { bubbles: true })); } };
 }
@@ -100,7 +106,7 @@ test("垂木けびき線の原版と同じタツ・カネを表示し、保存�
   assert.equal(b.w.localStorage.getItem("keraba-proof"), "keep");
 });
 
-test("垂木の途中入力は補完せず復元し、壊れた保存でも原版の初期値から使える", (t) => {
+test("垂木の途中入力は補完せず復元し、壊れた保存は空欄から使える", (t) => {
   const a = kebiki(t);
   a.change("taruki", "");
   assert.equal(a.get("kane").textContent, "—");
@@ -108,7 +114,77 @@ test("垂木の途中入力は補完せず復元し、壊れた保存でも原�
   assert.equal(b.get("taruki").value, "");
   assert.equal(b.get("tatsu").textContent, "—");
   const c = kebiki(t, "{broken");
-  assert.equal(c.get("kane").textContent, "404.5");
+  assert.equal(c.get("kane").textContent, "—");
+  for(const id of ['keta','kobai','noki','taruki'])assert.equal(c.get(id).value,'');
+});
+
+test('けびき線は屋根寸法を上に置き、初回は4項目とも空欄で計算しない',t=>{
+  const a=kebiki(t);
+  assert.deepEqual([...a.w.document.querySelectorAll('legend')].map(el=>el.textContent),['屋根の寸法','部材寸法']);
+  assert.deepEqual([...a.w.document.querySelectorAll('input[type="number"]')].map(el=>el.id),['kobai','noki','keta','taruki']);
+  for(const id of ['keta','kobai','noki','taruki'])assert.equal(a.get(id).value,'');
+  assert.equal(a.get('kane').textContent,'—');assert.equal(a.get('tatsu').textContent,'—');
+});
+
+test('桁90・105・120、垂木60・90、勾配1〜5の候補を選んでも自由入力へ続けて変更できる',t=>{
+  const a=kebiki(t);
+  const expected={keta:['90','105','120'],taruki:['60','90'],kobai:['1','1.5','2','2.5','3','3.5','4','4.5','5']};
+  for(const [id,values]of Object.entries(expected)){
+    const select=a.get(id+'-choice');
+    assert.deepEqual([...select.options].filter(option=>option.value).map(option=>option.value),values);
+    for(const value of values){
+      select.value=value;select.dispatchEvent(new a.w.Event('change',{bubbles:true}));
+      assert.equal(a.get(id).value,value);assert.equal(select.value,'');assert.equal(a.w.document.activeElement,a.get(id));
+    }
+  }
+  for(const [id,value]of Object.entries({keta:'110.5',taruki:'75.5',kobai:'3.75',noki:'600.5'}))a.change(id,value);
+  assert.notEqual(a.get('kane').textContent,'—');assert.equal(a.get('kobai').value,'3.75');
+  a.get('kobai-choice').value='4';a.get('kobai-choice').dispatchEvent(new a.w.Event('change'));
+  assert.equal(a.get('kobai').value,'4');
+});
+
+test('桁・垂木1〜300、軒0〜2000の境界を検証し、範囲外は補正せず計算結果を消す',t=>{
+  const a=kebiki(t);
+  const valid={keta:'105',taruki:'60',kobai:'3.5',noki:'455'};
+  for(const [id,value]of Object.entries(valid))a.change(id,value);
+  for(const [id,values]of Object.entries({keta:['1','300'],taruki:['1','300'],noki:['0','2000'],kobai:['0','0.5','9']})){
+    for(const value of values){a.change(id,value);assert.notEqual(a.get('kane').textContent,'—');assert.equal(a.get(id).getAttribute('aria-invalid'),'false');}
+    a.change(id,valid[id]);
+  }
+  for(const [id,values]of Object.entries({keta:['0','0.9','300.1'],taruki:['0','0.9','300.1'],noki:['-0.1','2000.1'],kobai:['-0.1']})){
+    for(const value of values){
+      a.change(id,value);assert.equal(a.get(id).value,value);assert.equal(a.get('kane').textContent,'—');assert.equal(a.get('tatsu').textContent,'—');
+      assert.equal(a.get(id).getAttribute('aria-invalid'),'true');assert.equal(a.get(id+'-error').hidden,false);
+    }
+    a.change(id,valid[id]);assert.notEqual(a.get('kane').textContent,'—');
+  }
+  a.change('kobai','1e308');assert.equal(a.get('kane').textContent,'—');assert.ok(!a.w.document.body.textContent.includes('Infinity'));
+});
+
+test('リセットをキャンセルすれば入力を維持し、確定後は再読込しても空欄になる',t=>{
+  const a=kebiki(t);for(const [id,value]of Object.entries({keta:'120',taruki:'90',kobai:'4.5',noki:'650'}))a.change(id,value);
+  const before=a.w.localStorage.getItem('kebiki-line.input.v1'),result=a.get('kane').textContent;
+  a.get('btnReset').click();assert.equal(a.get('resetDialog').open,true);a.get('resetCancel').click();
+  assert.equal(a.w.localStorage.getItem('kebiki-line.input.v1'),before);assert.equal(a.get('kane').textContent,result);
+  a.get('btnReset').click();a.get('resetConfirm').click();
+  for(const id of ['keta','kobai','noki','taruki'])assert.equal(a.get(id).value,'');
+  assert.equal(a.get('kane').textContent,'—');assert.equal(a.get('tatsu').textContent,'—');
+  const b=kebiki(t,a.w.localStorage.getItem('kebiki-line.input.v1'));for(const id of ['keta','kobai','noki','taruki'])assert.equal(b.get(id).value,'');
+  assert.equal(a.w.localStorage.getItem('bolt-proof'),'keep');assert.equal(a.w.localStorage.getItem('keraba-proof'),'keep');
+  a.get('btnReset').click();assert.equal(a.get('resetDialog').open,false);
+});
+
+test('全項目がそろうまで結果を表示せず、保存領域が使えなくても計算とリセットは動く',t=>{
+  const a=kebiki(t,null,true);
+  for(const [id,value]of Object.entries({keta:'105',taruki:'60',kobai:'1'}))a.change(id,value);
+  assert.equal(a.get('kane').textContent,'—');a.change('noki','455');assert.equal(a.get('kane').textContent,'404.5');
+  a.get('btnReset').click();a.get('resetConfirm').click();assert.equal(a.get('keta').value,'');assert.equal(a.get('kane').textContent,'—');
+});
+
+test('指定範囲の端でカネが負になる場合も、元の計算式と小数1桁の表示を維持する',t=>{
+  const a=kebiki(t);
+  for(const [id,value]of Object.entries({keta:'1',taruki:'300',kobai:'5',noki:'0'}))a.change(id,value);
+  assert.equal(a.get('kane').textContent,'0.6');assert.equal(a.get('tatsu').textContent,'-149.4');
 });
 
 test("ケラバの通常・瓦の図と保存を引き継ぎ、子画面は更新処理を重複させない", (t) => {

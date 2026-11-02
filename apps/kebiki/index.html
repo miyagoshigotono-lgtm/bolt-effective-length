@@ -20,7 +20,7 @@ body {
 }
 .app { display:flex; height:100vh; height:100dvh; overflow:hidden; }
 .side { width:525px; min-width:525px; background:var(--panel); border-right:1px solid var(--line); display:flex; flex-direction:column; }
-.side header { padding:15px 18px 13px; border-bottom:1px solid var(--line); }
+.side header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 18px 13px; border-bottom:1px solid var(--line); }
 h1 { margin:0; font-size:21px; letter-spacing:.04em; }
 .scroll { flex:1; overflow-y:auto; overflow-x:hidden; padding:18px; }
 fieldset { min-inline-size:0; min-width:0; margin:0 0 18px; padding:13px 16px 16px; border:1px solid var(--line); border-radius:6px; }
@@ -30,6 +30,22 @@ legend { padding:0 8px; font-size:17px; font-weight:700; color:var(--accent2); l
 input, select { flex:1 1 0; min-width:0; width:0; padding:7px 9px; border:1px solid var(--line); border-radius:5px; background:#fbfcfe; color:var(--ink); font:inherit; font-size:18px; }
 input { text-align:right; }
 input:focus, select:focus { outline:2px solid #bcd8f7; border-color:var(--accent); }
+.number-choice { flex:1 1 0; min-width:0; position:relative; }
+.number-choice input { display:block; width:100%; padding-right:42px; }
+.number-choice select { position:absolute; top:0; right:0; height:100%; width:34px; padding:0; border-radius:0 5px 5px 0; appearance:none; color:transparent; cursor:pointer; background:#f0f5fc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%23124680' stroke-width='2'/%3E%3C/svg%3E") no-repeat center; }
+.number-choice option { color:var(--ink); font-size:18px; background:#fff; }
+.field-error { margin:0 0 8px; color:#a51919; font-size:15px; font-weight:600; }
+[hidden] { display:none!important; }
+button { padding:8px 16px; border:1px solid var(--line); border-radius:5px; color:var(--ink); background:#fff; font:inherit; font-size:16px; font-weight:700; cursor:pointer; }
+button:hover { background:#eef4fc; }
+button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+#resetDialog { width:460px; max-width:94vw; padding:22px; border:1px solid var(--line); border-radius:8px; }
+#resetDialog::backdrop { background:#1c243050; }
+#resetDialog h2 { margin:0 0 16px; font-size:21px; }
+#resetDialog p { font-size:17px; line-height:1.6; }
+.dialog-actions { display:flex; justify-content:flex-end; flex-wrap:wrap; gap:10px; margin-top:20px; }
+.primary { background:var(--accent); color:#fff; border-color:var(--accent); }
+.primary:hover { background:var(--accent2); }
 .unit { flex:0 0 36px; font-size:16px; }
 .sr-only { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip-path:inset(50%); white-space:nowrap; }
 .main { flex:1; min-width:0; display:flex; flex-direction:column; overflow:hidden; }
@@ -75,36 +91,52 @@ input:focus, select:focus { outline:2px solid #bcd8f7; border-color:var(--accent
 
 <div class="app">
   <aside class="side" aria-label="入力">
-    <header><h1>垂木けびき線</h1></header>
+    <header><h1>垂木けびき線</h1><button id="btnReset" type="button">リセット</button></header>
     <div class="scroll">
-      <fieldset>
-        <legend>部材寸法</legend>
-        <div class="row">
-          <label for="keta">桁寸</label>
-          <select id="keta">
-            <option value="105">105角</option>
-            <option value="90">90角</option>
-          </select>
-          <span class="unit" aria-hidden="true"></span>
-        </div>
-        <div class="row">
-          <label for="taruki">垂木成<span class="sr-only">（mm）</span></label>
-          <input type="number" id="taruki" value="60" min="0" max="100">
-          <span class="unit" aria-hidden="true">mm</span>
-        </div>
-      </fieldset>
       <fieldset>
         <legend>屋根の寸法</legend>
         <div class="row">
-          <label for="kobai">勾配<span class="sr-only">（寸）</span></label>
-          <select id="kobai"></select>
+          <label for="kobai">屋根勾配<span class="sr-only">（寸）</span></label>
+          <div class="number-choice">
+            <input type="number" id="kobai" min="0" step="any" inputmode="decimal" aria-describedby="kobai-error">
+            <select id="kobai-choice" aria-label="屋根勾配の候補"><option value="" disabled selected>選択</option></select>
+          </div>
           <span class="unit" aria-hidden="true">寸</span>
         </div>
+        <p id="kobai-error" class="field-error" role="alert" hidden></p>
         <div class="row">
           <label for="noki">軒の出<span class="sr-only">（mm）</span></label>
-          <input type="number" id="noki" value="455" min="0">
+          <input type="number" id="noki" min="0" max="2000" step="any" inputmode="decimal" aria-describedby="noki-error">
           <span class="unit" aria-hidden="true">mm</span>
         </div>
+        <p id="noki-error" class="field-error" role="alert" hidden></p>
+      </fieldset>
+      <fieldset>
+        <legend>部材寸法</legend>
+        <div class="row">
+          <label for="keta">桁寸<span class="sr-only">（mm）</span></label>
+          <div class="number-choice">
+            <input type="number" id="keta" min="1" max="300" step="any" inputmode="decimal" aria-describedby="keta-error">
+            <select id="keta-choice" aria-label="桁寸の候補">
+              <option value="" disabled selected>選択</option>
+              <option value="90">90</option><option value="105">105</option><option value="120">120</option>
+            </select>
+          </div>
+          <span class="unit" aria-hidden="true">mm</span>
+        </div>
+        <p id="keta-error" class="field-error" role="alert" hidden></p>
+        <div class="row">
+          <label for="taruki">垂木成<span class="sr-only">（mm）</span></label>
+          <div class="number-choice">
+            <input type="number" id="taruki" min="1" max="300" step="any" inputmode="decimal" aria-describedby="taruki-error">
+            <select id="taruki-choice" aria-label="垂木成の候補">
+              <option value="" disabled selected>選択</option>
+              <option value="60">60</option><option value="90">90</option>
+            </select>
+          </div>
+          <span class="unit" aria-hidden="true">mm</span>
+        </div>
+        <p id="taruki-error" class="field-error" role="alert" hidden></p>
       </fieldset>
     </div>
   </aside>
@@ -130,51 +162,91 @@ input:focus, select:focus { outline:2px solid #bcd8f7; border-color:var(--accent
   </main>
 </div>
 
+<dialog id="resetDialog" aria-labelledby="reset-title" aria-describedby="reset-message">
+  <h2 id="reset-title">入力をリセットしますか？</h2>
+  <p id="reset-message">入力した値をすべて空欄にします。</p>
+  <div class="dialog-actions">
+    <button id="resetCancel" type="button">キャンセル</button>
+    <button id="resetConfirm" type="button" class="primary">リセットする</button>
+  </div>
+</dialog>
+
 <script>
-const kobaiSel = document.getElementById("kobai");
-for (let v = 0.5; v <= 9.0; v = Math.round((v + 0.5) * 10) / 10) {
+const get = id => document.getElementById(id);
+const savedFields = ["keta","kobai","noki","taruki"];
+const storageKey = "kebiki-line.input.v1";
+for (let v = 1; v <= 5; v += 0.5) {
   const o = document.createElement("option");
   o.value = v;
   o.textContent = v.toFixed(1);
-  if (Math.abs(v - 1.0) < 0.01) o.selected = true;
-  kobaiSel.appendChild(o);
+  get('kobai-choice').appendChild(o);
 }
 function calc() {
-  const keta = parseFloat(document.getElementById("keta").value);
-  const C = parseFloat(kobaiSel.value) / 10;
-  const D = parseFloat(document.getElementById("noki").value);
-  const T = parseFloat(document.getElementById("taruki").value);
-  if (isNaN(D) || isNaN(T)) {
-    document.getElementById("kane").textContent = "—";
-    document.getElementById("tatsu").textContent = "—";
-    return;
+  const values = {};
+  let complete = true;
+  for (const id of savedFields) {
+    const field = get(id), raw = field.value.trim(), value = field.valueAsNumber;
+    const invalid = field.validity.badInput || (raw !== '' && (!Number.isFinite(value) || !field.validity.valid));
+    const error = get(id + '-error');
+    error.hidden = !invalid;
+    error.textContent = invalid ? id === 'kobai' ? '屋根勾配は0以上の数値で入力してください。' :
+      id === 'noki' ? '軒の出は0〜2000 mmで入力してください。' :
+      (id === 'keta' ? '桁寸' : '垂木成') + 'は1〜300 mmで入力してください。' : '';
+    field.setAttribute('aria-invalid', String(invalid));
+    if (invalid || raw === '') complete = false;
+    values[id] = value;
   }
+  get('kane').textContent = get('tatsu').textContent = '—';
+  if (!complete) return;
+  const keta = values.keta, C = values.kobai / 10, D = values.noki, T = values.taruki;
   const horiz = D - keta / 2;
   const base = Math.sqrt(horiz ** 2 + (horiz * C) ** 2);
-  document.getElementById("kane").textContent = base.toFixed(1);
-  document.getElementById("tatsu").textContent = (base - T * C).toFixed(1);
+  const perpendicular = base - T * C;
+  if (!Number.isFinite(base) || !Number.isFinite(perpendicular)) {
+    get('kobai-error').textContent = '数値が大きすぎるため計算できません。';
+    get('kobai-error').hidden = false;
+    get('kobai').setAttribute('aria-invalid', 'true');
+    return;
+  }
+  get('kane').textContent = base.toFixed(1);
+  get('tatsu').textContent = perpendicular.toFixed(1);
 }
 // 計算式とタツ・カネの表示先は原版のまま、入力だけを専用キーへ保存する。
-const savedFields = ["keta","kobai","noki","taruki"];
-const storageKey = "kebiki-line.input.v1";
+function saveInputs() {
+  try {
+    const values = Object.fromEntries(savedFields.map(id => [id, get(id).value]));
+    localStorage.setItem(storageKey, JSON.stringify(values));
+  } catch { /* 保存できない場合も画面上の入力と計算は維持する。 */ }
+}
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
   if (saved && typeof saved === "object") {
     for (const id of savedFields) {
       if (typeof saved[id] !== "string" || saved[id].length > 64) continue;
-      const field = document.getElementById(id);
-      if (field.tagName === "SELECT" && !Array.from(field.options).some(option => option.value === saved[id])) continue;
-      field.value = saved[id];
+      get(id).value = saved[id];
     }
   }
 } catch { /* 保存の不具合で計算を止めない。 */ }
-savedFields.forEach(id => document.getElementById(id).addEventListener("input", () => {
-  calc();
-  try {
-    const values = Object.fromEntries(savedFields.map(key => [key, document.getElementById(key).value]));
-    localStorage.setItem(storageKey, JSON.stringify(values));
-  } catch { /* 入力中の値はそのまま保つ。 */ }
+savedFields.forEach(id => {
+  ['input','change'].forEach(event => get(id).addEventListener(event, () => { calc(); saveInputs(); }));
+});
+['keta','taruki','kobai'].forEach(id => get(id + '-choice').addEventListener('change', event => {
+  if (event.target.value === '') return;
+  get(id).value = event.target.value;
+  event.target.value = '';
+  calc(); saveInputs(); get(id).focus();
 }));
+function resetInputs() {
+  savedFields.forEach(id => { get(id).value = ''; });
+  ['keta','taruki','kobai'].forEach(id => { get(id + '-choice').value = ''; });
+  calc(); saveInputs();
+}
+get('btnReset').onclick = () => {
+  if (savedFields.some(id => get(id).value !== '' || get(id).validity.badInput)) get('resetDialog').showModal();
+  else resetInputs();
+};
+get('resetCancel').onclick = () => get('resetDialog').close();
+get('resetConfirm').onclick = () => { get('resetDialog').close(); resetInputs(); };
 calc();
 </script>
 </body>
