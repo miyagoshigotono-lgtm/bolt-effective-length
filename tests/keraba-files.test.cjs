@@ -19,7 +19,8 @@ function cloud() {
     const path = key(body.name, owner), previous = files.get(path);
     if (body.action === 'list') return Response.json({ items: [...files].filter(([path]) => path.startsWith(owner + ':')).map(([path, file]) => ({ path: path.slice(65), name: path.slice(65), sha: file.sha })) });
     if (body.action === 'save') {
-      if ((previous ? Number(previous.sha) : null) !== body.revision) return new Response('', { status: 409 });
+      if ((previous ? Number(previous.sha) : null) !== body.revision) return Response.json(
+        body.revision===null && previous ? {existingRevision:previous.sha} : {}, {status:409});
       const file = { sha: String(++revision), text: JSON.stringify(body.document) };
       files.set(path, file);
       return Response.json({ path: body.name, sha: file.sha });
@@ -47,7 +48,7 @@ async function openCloud(a, name) {
   await settled(a);
 }
 
-function keraba(t, { blocked = false, fetcher, owner = 'a'.repeat(64), hash = '' } = {}) {
+function keraba(t, { blocked = false, fetcher, owner = 'a'.repeat(64), hash = '', saved = {} } = {}) {
   const errors = [];
   const console = new VirtualConsole();
   console.on("jsdomError", (error) => errors.push(error.message));
@@ -58,6 +59,7 @@ function keraba(t, { blocked = false, fetcher, owner = 'a'.repeat(64), hash = ''
       w.TextEncoder = TextEncoder; w.TextDecoder = TextDecoder;
       if (fetcher) w.fetch = fetcher;
       if (owner) w.localStorage.setItem("keraba.cloud-owner.v1", owner);
+      for(const [mode,inputs] of Object.entries(saved)) w.localStorage.setItem('keraba_last_'+mode+'_v1',JSON.stringify(inputs));
       w.HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open",""); };
       w.HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
       w.localStorage.setItem("bolt-proof", "keep");
@@ -266,7 +268,8 @@ test('同じ名前の未読データは確認なしで置き換えず、確認�
   a.get('projectSaveName').value = '既存データ';
   await submit(a, 'projectSaveForm');
   assert.equal(a.get('projectSaveOverwrite').hidden, false);
-  assert.equal(remote.calls.filter(call => JSON.parse(call.options.body).action === 'save').length, 0);
+  assert.equal(remote.calls.filter(call => JSON.parse(call.options.body).action === 'save').length, 1);
+  assert.equal(JSON.parse(remote.file('既存データ').text).inputs.pitch,8.5);
   const newer = { ...doc, inputs: { ...doc.inputs, pitch: 6.5 } };
   remote.put('既存データ', newer);
   a.get('projectSaveOverwriteCheck').checked = true;
@@ -358,7 +361,7 @@ test('同名への明示的な上書き確認で更新し、保存通信中の�
   const remote = cloud();
   let release;
   const a = keraba(t, { fetcher: async (url, options) => {
-    if (JSON.parse(options.body).action === 'save') await new Promise(resolve => { release = resolve; });
+    if (JSON.parse(options.body).action === 'save' && JSON.parse(options.body).revision!==null) await new Promise(resolve => { release = resolve; });
     return remote.fetcher(url, options);
   } });
   remote.put('上書き検証', a.doc());
@@ -383,7 +386,7 @@ test('保存・開く・リセットを並べ、未保存のリセットは確�
   a.get('projectResetCancel').click();
   assert.deepEqual(a.doc().inputs,before);assert.deepEqual(a.svg(),svg);
   a.get('btnReset').click();a.get('projectResetConfirm').click();
-  assert.equal(a.get('pitch').value,'1'); assert.match(a.get('fileStatus').textContent,/保存済みデータは残って/);
+  assert.equal(a.get('pitch').value,''); assert.match(a.get('fileStatus').textContent,/保存済みデータは残って/);
   a.get('btnReset').click();assert.equal(a.get('projectResetDialog').open,false);
 });
 
@@ -392,11 +395,11 @@ test('保存済みのリセットは再確認せず、通常・瓦とクラウ�
   a.change('pitch','3.5');a.get('btnSaveProject').click();a.get('projectSaveName').value='リセット検証';
   await submit(a,'projectSaveForm');const cloudText=remote.file('リセット検証').text;
   const writes=remote.calls.length;
-  a.get('btnReset').click();assert.equal(a.get('projectResetDialog').open,false);assert.equal(a.get('pitch').value,'1');
+  a.get('btnReset').click();assert.equal(a.get('projectResetDialog').open,false);assert.equal(a.get('pitch').value,'');
   assert.equal(remote.file('リセット検証').text,cloudText);assert.equal(remote.calls.length,writes);
   a.get('tabTile').click();a.change('pitch','7.5');a.get('btnReset').click();
   assert.equal(a.get('projectResetDialog').open,true);assert.equal(a.get('pitch').value,'7.5');a.get('projectResetCancel').click();
-  a.get('tabNormal').click();assert.equal(a.get('pitch').value,'1');
+  a.get('tabNormal').click();assert.equal(a.get('pitch').value,'');
 });
 
 test('再起動後も未保存変更を判別し、読み込み取消しでは元の確認状態へ戻す',async t=>{
@@ -408,4 +411,53 @@ test('再起動後も未保存変更を判別し、読み込み取消しでは�
   b.w.eval(fs.readFileSync(path.join(__dirname,'../apps/keraba/cloud-ui.js'),'utf8'));
   b.change('pitch','4.5');b.get('btnReset').click();assert.equal(b.get('projectResetDialog').open,true);b.get('projectResetCancel').click();
   remote.put('読み込むデータ',a.doc());await openCloud(b,'読み込むデータ');b.get('btnUndoOpen').click();b.get('btnReset').click();assert.equal(b.get('projectResetDialog').open,true);
+});
+
+test('通常・瓦のリセットで寸法・物件情報・条件を空欄にし、図を計算済みとして表示しない',t=>{
+  for(const mode of ['normal','tile']){
+    const a=keraba(t);
+    if(mode==='tile')a.get('tabTile').click();
+    a.change('name','入力確認');a.get('btnReset').click();a.get('projectResetConfirm').click();
+    for(const el of a.get('form').querySelectorAll('input[type="number"],input[type="text"],select')) assert.equal(el.value,'',el.id);
+    for(const key of ['fixHafu','fixHanaShimo','fixHanaKami'])assert.equal(a.get(key).checked,false);
+    assert.equal(a.get('total').value,'500');assert.equal(a.get('dHana').checked,true);
+    assert.match(a.get('sheet').textContent,/必要な寸法を入力/);assert.match(a.get('sheetOrd').textContent,/必要な寸法を入力/);
+    assert.equal(a.get('btnPrintDwg').disabled,true);assert.equal(a.get('btnPrintOrd').disabled,true);
+    assert.ok(!a.svg().join('').match(/NaN|Infinity/));
+    a.change('pitch','4.25');assert.equal(a.get('moyaSize').value,'');assert.equal(a.get('normalHafuHeight').value,'');
+    assert.match(a.get('sheet').textContent,/必要な寸法を入力/);
+  }
+});
+
+test('空欄のまま再起動・クラウド保存・読み出しができ、以前の初期値を補完しない',async t=>{
+  const remote=cloud(),a=keraba(t,{fetcher:remote.fetcher});
+  a.get('btnReset').click();a.get('projectResetConfirm').click();
+  const empty=a.doc().inputs;
+  const restarted=keraba(t,{saved:{normal:empty}});
+  assert.deepEqual(restarted.doc().inputs,empty);assert.match(restarted.get('sheet').textContent,/必要な寸法を入力/);
+  a.get('btnSaveProject').click();a.get('projectSaveName').value='未入力の保存';await submit(a,'projectSaveForm');
+  const b=keraba(t,{fetcher:remote.fetcher});await openCloud(b,'未入力の保存');
+  assert.deepEqual(b.doc().inputs,empty);assert.match(b.get('sheet').textContent,/必要な寸法を入力/);
+});
+
+test('空欄から必要な寸法を入力すると図を再開し、入力値を既定寸法で置き換えない',t=>{
+  const a=keraba(t);a.get('btnReset').click();a.get('projectResetConfirm').click();
+  const values={pitch:'3.5',tNoji:'12',hTaruki:'75',moyaSize:'120',notchRef:'25',ovShimo:'80',ovKami:'60',
+    normalHafuWidth:'35',normalHafuHeight:'180',clearance:'0',hafu:'on',hanaShimo:'none',hanaKami:'none'};
+  for(const [key,value]of Object.entries(values))a.change(key,value);
+  assert.ok(!a.get('sheet').textContent.includes('必要な寸法を入力'));
+  assert.equal(a.get('moyaSize').value,'120');assert.equal(a.get('normalHafuHeight').value,'180');
+  assert.equal(a.get('btnPrintDwg').disabled,false);
+});
+
+test('新しい名前への保存は事前読込をせず1回の通信で完了し、同名の確認も追加読込をしない',async t=>{
+  const remote=cloud(),a=keraba(t,{fetcher:remote.fetcher});
+  a.get('btnSaveProject').click();a.get('projectSaveName').value='通信回数確認';await submit(a,'projectSaveForm');
+  assert.deepEqual(remote.calls.map(call=>JSON.parse(call.options.body).action),['save']);
+  const b=keraba(t,{fetcher:remote.fetcher});b.get('btnSaveProject').click();b.get('projectSaveName').value='通信回数確認';
+  await submit(b,'projectSaveForm');assert.equal(b.get('projectSaveOverwrite').hidden,false);
+  assert.deepEqual(remote.calls.map(call=>JSON.parse(call.options.body).action),['save','save']);
+  b.get('projectSaveOverwriteCheck').checked=true;await submit(b,'projectSaveForm');
+  assert.deepEqual(remote.calls.map(call=>JSON.parse(call.options.body).action),['save','save','save']);
+  assert.equal(b.get('projectSaveDialog').open,false);
 });

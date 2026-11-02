@@ -81,3 +81,12 @@ test('保存名とUTF-8の1 MB境界を検証し、不正入力では送信し�
   assert.equal(Buffer.byteLength(exact),1024*1024); await store.save('検証',exact);
   await assert.rejects(store.save('検証',exact+' '),/1 MB/); assert.equal(calls,1);
 });
+
+test('重複新規保存の応答だけから上書き確認用の版を取得し、未知の応答は信用しない',async()=>{
+  for(const revision of ['7','invalid','0','9007199254740992']){
+    const store=createStore({storage:storage(),fetcher:async()=>Response.json({existingRevision:revision},{status:409})});
+    await assert.rejects(store.save('検証','{}'),error=>{
+      assert.equal(error.status,409);assert.equal(error.existingSha,revision==='7'?'7':undefined);return true;
+    });
+  }
+});
