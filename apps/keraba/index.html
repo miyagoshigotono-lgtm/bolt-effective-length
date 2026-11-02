@@ -422,7 +422,7 @@
 </dialog>
 <dialog id="projectResetDialog" class="cloud-dialog" aria-labelledby="projectResetTitle" aria-describedby="projectResetMessage">
   <h2 id="projectResetTitle">保存せずにリセットしますか？</h2>
-  <p id="projectResetMessage">保存していない変更があります。入力を初期値に戻します。保存済みのデータは残ります。</p>
+  <p id="projectResetMessage">保存していない変更があります。入力をすべて空欄にします。保存済みのデータは残ります。</p>
   <div class="project-save-actions">
     <button id="projectResetCancel" type="button">キャンセル</button>
     <button id="projectResetConfirm" type="button" class="primary">保存せずにリセット</button>
@@ -511,6 +511,21 @@ function writeForm(p){
     if(FIELDS[k]==='bool') el.checked = !!v;
     else el.value = (v===null||v===undefined) ? '' : v;
   }
+}
+
+// 入力を消しても、図の表示設定・縮尺は操作できる状態を保つ。
+const VIEW_FIELDS = new Set(['total','fscale','lscale','orient', ...Object.keys(FIELDS).filter(key=>/^d[A-Z0-9]/.test(key))]);
+for(const key of Object.keys(FIELDS)){
+  const el=document.getElementById(key);
+  if(el?.tagName==='SELECT' && !VIEW_FIELDS.has(key)) el.prepend(new Option('未選択',''));
+}
+function emptyProjectInputs(){
+  const inputs=readForm();
+  for(const [key,type] of Object.entries(FIELDS)){
+    if(!Object.prototype.hasOwnProperty.call(inputs,key) || VIEW_FIELDS.has(key)) continue;
+    inputs[key]=type==='num'?null:type==='bool'?false:'';
+  }
+  return inputs;
 }
 
 function loadSavedForm(mode){
@@ -1414,18 +1429,18 @@ function syncMaterialInputs(p,g){
     if(el && document.activeElement!==el) el.value=(v===null||v===undefined) ? '' : fmt(v);
   };
   set('normalHafuWidth', p.tHafu);
-  set('normalHafuHeight', g.wHafu);
+  set('normalHafuHeight', g ? g.wHafu : p.wHafu);
   set('normalHanaKamiWidth', p.tHana);
   set('normalHanaShimoWidth', p.tHana);
-  set('normalHanaKamiHeight', g.hHanaOrderK);
-  set('normalHanaShimoHeight', g.hHanaOrderS);
+  set('normalHanaKamiHeight', g ? g.hHanaOrderK : p.hHanaKamiOrder);
+  set('normalHanaShimoHeight', g ? g.hHanaOrderS : p.hHanaShimoOrder);
 
   set('tileHanaShimoWidth', p.tHana);
-  set('tileHanaShimoHeight', g.hHanaOrderS);
+  set('tileHanaShimoHeight', g ? g.hHanaOrderS : p.hHanaShimoOrder);
   set('tileHafuWidth', p.tHafu);
-  set('tileHafuHeight', g.wHafu);
+  set('tileHafuHeight', g ? g.wHafu : p.wHafu);
   set('tileHanaKamiWidth', p.tHana);
-  set('tileHanaKamiHeight', g.hHanaOrderK);
+  set('tileHanaKamiHeight', g ? g.hHanaOrderK : p.hHanaKamiOrder);
 
   document.querySelectorAll('[data-fixed-for]').forEach(el=>{
     const fixed=$(el.dataset.fixedFor);
@@ -1505,8 +1520,49 @@ function updatePrintWarning(p,g){
   ['btnPrintDwg','btnPrintOrd','btnPrintBoth'].forEach(id=>$(id).disabled=blocked);
 }
 
+function hasDrawingInputs(p){
+  const keys=['pitch','tNoji','hTaruki','moyaSize','notchRef','ovShimo','ovKami'];
+  if(!p.hafu || !p.hanaShimo || !p.hanaKami) return false;
+  if(p.hafu!=='none') keys.push('tHafu','clearance');
+  if(p.hanaShimo!=='none' || p.hanaKami!=='none') keys.push('tHana');
+  if(p.fixHafu && p.hafu!=='none') keys.push('wHafu');
+  if(p.fixHanaShimo && p.hanaShimo!=='none') keys.push('hHanaShimoOrder');
+  if(p.fixHanaKami && p.hanaKami!=='none') keys.push('hHanaKamiOrder');
+  const parts=[['hafu','fixHafu','wHafu'],['hanaShimo','fixHanaShimo','hHanaShimoOrder'],['hanaKami','fixHanaKami','hHanaKamiOrder']].filter(([part])=>p[part]!=='none');
+  if(parts.length && !parts.some(([,fixed,height])=>p[fixed] && Number.isFinite(p[height]) && p[height]>=10)) return false;
+  if(p.roofMode==='tile'){
+    for(const [part,offset,choices] of [
+      ['hafu','tileHafuOffset',['tileHafuRef','tileHafuDir']],
+      ['hanaShimo','tileHanaSOffset',['tileHanaSRef','tileHanaSDir','tileHanaSSide']],
+      ['hanaKami','tileHanaKOffset',['tileHanaKRef','tileHanaKDir','tileHanaKSide']]
+    ]){
+      if(p[part]==='none') continue;
+      keys.push(offset);
+      if(choices.some(key=>!p[key])) return false;
+    }
+  }
+  return keys.every(key=>Number.isFinite(p[key]));
+}
+function emptySheet(p, order=false){
+  const width=order||p.orient==='portrait'?210:297, height=order||p.orient==='portrait'?297:210;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}mm" height="${height}mm"><rect width="100%" height="100%" fill="white"/><text x="50%" y="50%" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#5b6878">必要な寸法を入力すると${order?'発注書':'図'}を表示します</text></svg>`;
+}
 function refresh(){
   const p = getParams();
+  if(!hasDrawingInputs(p)){
+    syncMaterialInputs(p,null);
+    updateEnabled(p);
+    $('printWarning').classList.remove('is-visible');
+    $('printWarningList').replaceChildren();
+    ['btnPrintDwg','btnPrintOrd','btnPrintBoth'].forEach(id=>$(id).disabled=true);
+    $('sheet').innerHTML=emptySheet(p);
+    $('sheet').className='sheet '+(p.orient==='portrait'?'port':'land');
+    $('sheetOrd').innerHTML=emptySheet(p,true);
+    $('pgLabel').textContent='寸法の入力待ち';
+    applyZoom();
+    saveCurrentForm();
+    return;
+  }
   const g = geometry(p);
   // 未固定の破風板は、固定された鼻隠しに合わせた逆算値を入力欄にも戻す。
   if(!p.fixHafu) $('wHafu').value = Math.round(g.wHafu*10)/10;
@@ -1640,6 +1696,7 @@ function setPrintMode(mode){
 }
 function doPrint(mode){                    // 'dwg' | 'ord' | 'both'
   const p=getParams();
+  if(!hasDrawingInputs(p)) return;
   if(getPrintWarnings(p,geometry(p)).length && !$('ackWarning').checked) return;
   setPrintMode(mode);
   // 差し替えたスタイルが反映されてから印刷ダイアログを開く
@@ -1771,7 +1828,7 @@ checkUpdate();
 setInterval(checkUpdate, 3*60*1000);
 window.addEventListener('focus', checkUpdate);
 </script>
-<script src="cloud-store.js?v=20261102-2"></script>
-<script src="cloud-ui.js?v=20261102-2"></script>
+<script src="cloud-store.js?v=20261102-3"></script>
+<script src="cloud-ui.js?v=20261102-3"></script>
 </body>
 </html>

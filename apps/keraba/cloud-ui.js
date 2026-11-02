@@ -149,13 +149,12 @@
 
   function resetInputs() {
     // リセットは表示中の入力だけを戻し、保存済みのクラウドデータには触れない。
-    try { localStorage.removeItem(STORAGE_KEYS[activeMode]); } catch { /* 入力欄のリセットは続ける。 */ }
     $('ackWarning').checked = false;
     projectCloudRecords[activeMode] = null;
     projectSaveNames[activeMode] = '';
     fileImportBackup = null;
     $('btnUndoOpen').hidden = true;
-    writeForm(loadSavedForm(activeMode));
+    writeForm(emptyProjectInputs());
     refresh();
     markClean(activeMode, clean());
     showFileStatus('入力をリセットしました。保存済みデータは残っています。');
