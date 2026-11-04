@@ -204,7 +204,7 @@
       <fieldset>
         <legend>物件情報</legend>
         <div class="row"><label>邸名</label><input type="text" id="name" value="" placeholder="◯◯様邸"></div>
-        <div class="row"><label>屋根勾配</label><input type="number" id="pitch" value="1.0" step="0.1" min="0.1" max="12"><span class="unit">寸</span></div>
+        <div class="row"><label>屋根勾配</label><input type="number" id="pitch" value="1.0" step="any" min="0.1" max="12"><span class="unit">寸</span></div>
         <div class="row"><label>屋根材・色</label><input type="text" id="material" value="ガルバリウム"></div>
         <div class="row"><label>破風板</label>
           <select id="hafu">
@@ -895,6 +895,8 @@ const SW = 297, SH = 210;
 
 function buildContent(p, g){
   const o  = [];
+  // 勾配は寸法用の小数1桁丸めを使わず、入力された小数を表示する。
+  const pitchLabel = Number.isInteger(g.pitch) ? g.pitch.toFixed(1) : String(g.pitch);
   const LS = Math.max(.4, p.lscale||1);
   const FS = Math.max(.5, p.fscale||1);
   const ROT = (p.orient==='portrait') ? 90 : 0;   // 用紙の回転量（文字の向き判定に使用）
@@ -1259,22 +1261,25 @@ function buildContent(p, g){
 
   /* ---- 勾配マーク ---- */
   if(p.dSlope){
+    // 三角形の大きさは保ち、寸法比の表記は横10を基準にする。
     const mk = Math.min(k, 20/Math.max(1e-6, 100*g.tan));
     const run = 100*mk, rise = 100*g.tan*mk;
     const mx = PX(0) + 12;
     const clear = F_DIM*1.9 + ((p.dOverS && g.capS) ? F_DIM*1.6 : 0);
     const myBase = Math.max(headB+F_DIM, PY(g.lnC((mx-ox+run)/k)) - clear - rise);
-    line(mx, myBase, mx+run, myBase, W_OUT);                 // 基準（100）
+    o.push(`<g aria-label="屋根勾配 ${pitchLabel}寸">`);
+    line(mx, myBase, mx+run, myBase, W_OUT);                 // 基準（10）
     line(mx, myBase, mx, myBase+rise, W_OUT);                // 立上り
     line(mx, myBase+rise, mx+run, myBase, W_OUT);            // 斜辺
-    text(mx+run/2, myBase-F_DIM*0.42, '100', F_DIM, 'middle');
-    text(mx-F_DIM*0.42, myBase+rise/2+F_DIM*0.36, fmt(g.pitch*10), F_DIM, 'end');
+    text(mx+run/2, myBase-F_DIM*0.42, '10', F_DIM, 'middle');
+    text(mx-F_DIM*0.42, myBase+rise/2+F_DIM*0.36, pitchLabel, F_DIM, 'end');
+    o.push('</g>');
   }
 
   /* ---- 注記 ---- */
 
   /* ---- 表題・注記ブロック ---- */
-  text(SW/2, yTitle, `${p.name||''}　屋根勾配：${(Number(g.pitch)).toFixed(1)}寸`, F_TTL, 'middle', 0, 700);
+  text(SW/2, yTitle, `${p.name||''}　屋根勾配：${pitchLabel}寸`, F_TTL, 'middle', 0, 700);
   if(p.material) text(SW/2, yMat, `（${p.material}）`, F_MAT, 'middle');
 
   noteLines.forEach((t,i)=>
