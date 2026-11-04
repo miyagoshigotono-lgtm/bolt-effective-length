@@ -83,6 +83,50 @@ function keraba(t, { blocked = false, fetcher, owner = 'a'.repeat(64), hash = ''
   };
 }
 
+test('通常・瓦の勾配を丸めず表題へ表示し、勾配マークは横10に対する入力値を示す', t => {
+  for (const mode of ['normal', 'tile']) {
+    const a = keraba(t);
+    if (mode === 'tile') a.get('tabTile').click();
+    for (const pitch of ['0.1', '0.15', '1', '1.01', '1.3', '1.33', '1.333', '4.25', '11.99', '12']) {
+      a.change('pitch', pitch);
+      const value = Number(pitch), label = Number.isInteger(value) ? value.toFixed(1) : pitch;
+      assert.equal(a.get('pitch').validity.stepMismatch, false);
+      assert.equal(a.doc().inputs.pitch, value);
+      const texts = [...a.get('sheet').querySelectorAll('text')].map(el => el.textContent);
+      assert.ok(texts.some(text => text.endsWith(`屋根勾配：${label}寸`)), `${mode}: ${pitch}`);
+      const mark = a.get('sheet').querySelector('g[aria-label^="屋根勾配 "]');
+      assert.deepEqual([...mark.querySelectorAll('text')].map(el => el.textContent), ['10', label]);
+      // 三角形の傾きと表示する寸勾配の比率が一致することも確認する。
+      const [base, rise] = mark.querySelectorAll('line');
+      const run = Number(base.getAttribute('x2')) - Number(base.getAttribute('x1'));
+      const height = Number(rise.getAttribute('y2')) - Number(rise.getAttribute('y1'));
+      assert.ok(Math.abs(height / run - value / 10) < 0.0002);
+      assert.equal(a.w.eval('geometry(getParams()).tan'), value / 10);
+    }
+    a.change('pitch', '1.33');
+    a.change('dSlope', false);
+    assert.equal(a.get('sheet').querySelector('g[aria-label^="屋根勾配 "]'), null);
+    assert.ok(a.get('sheet').textContent.includes('屋根勾配：1.33寸'));
+  }
+});
+
+test('1.33寸は再起動とJSON読み込み後も入力・表題・勾配マークに同じ精度を保つ', t => {
+  for (const mode of ['normal', 'tile']) {
+    const a = keraba(t);
+    if (mode === 'tile') a.get('tabTile').click();
+    a.change('pitch', '1.33');
+    const doc = a.doc(), svg = a.svg();
+    const restored = keraba(t, {saved: {[mode]: doc.inputs}});
+    if (mode === 'tile') restored.get('tabTile').click();
+    assert.equal(restored.get('pitch').value, '1.33');
+    assert.deepEqual(restored.svg(), svg);
+    const imported = keraba(t);
+    imported.open(doc);
+    assert.equal(imported.get('pitch').value, '1.33');
+    assert.deepEqual(imported.svg(), svg);
+  }
+});
+
 test("通常・瓦を別PCへJSONで移し、入力と図・発注書の数値をそのまま復元する", (t) => {
   for (const mode of ["normal", "tile"]) {
     const source = keraba(t);
