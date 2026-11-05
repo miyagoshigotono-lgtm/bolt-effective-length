@@ -567,6 +567,71 @@ test('空欄から必要な寸法を入力すると図を再開し、入力値�
   assert.equal(a.get('btnPrintDwg').disabled,false);
 });
 
+test('リセット後は作図に足りない必須欄だけを示し、0の入力でも条件がそろえば色と案内を消す',t=>{
+  for(const mode of ['normal','tile']){
+    const a=keraba(t), missing=id=>a.get(id).classList.contains('required-missing');
+    if(mode==='tile')a.get('tabTile').click();
+    a.get('btnReset').click();a.get('projectResetConfirm').click();
+    for(const id of ['pitch','tNoji','hTaruki','moyaSize','notchRef','ovShimo','ovKami','hafu','hanaShimo','hanaKami'])assert.equal(missing(id),true,id);
+    for(const id of ['name','material','client','total','zoom'])assert.equal(missing(id),false,id);
+    assert.equal(a.get('drawingRequiredHint').hidden,false);
+    assert.match(a.get('drawingRequiredHint').textContent,/どれか1つ/);
+    for(const id of ['hafu','hanaShimo','hanaKami'])a.change(id,'none');
+    for(const id of ['clearance','normalHafuWidth','normalHafuHeight','tileHanaSOffset','tileHanaKOffset','tileHafuOffset'])assert.equal(missing(id),false,id);
+    for(const [id,value]of Object.entries({pitch:'1.33',tNoji:'12',hTaruki:'60',moyaSize:'105',notchRef:'0',ovShimo:'0',ovKami:'0'}))a.change(id,value);
+    assert.equal(a.get('form').querySelectorAll('.required-missing,.required-reference').length,0);
+    assert.equal(a.get('drawingRequiredHint').hidden,true);
+    assert.ok(!a.get('sheet').textContent.includes('必要な寸法を入力'));
+  }
+});
+
+test('不足する共通板厚と固定成は見える入力欄を色付けし、使わない部材は対象から外す',t=>{
+  const a=keraba(t), missing=id=>a.get(id).classList.contains('required-missing');
+  a.change('hafu','none');a.change('hanaShimo','none');a.change('hanaKami','cutBottom');
+  a.change('normalHanaKamiWidth','');
+  assert.equal(missing('normalHanaKamiWidth'),true);
+  assert.equal(missing('normalHanaShimoWidth'),false);
+  assert.equal(missing('tileHanaKamiWidth'),false);
+  assert.equal(missing('tHana'),false);
+  assert.equal(a.get('normalHanaKamiWidth').getAttribute('aria-describedby'),'drawingRequiredHint');
+  a.change('normalHanaKamiWidth','30');a.change('normalHanaKamiHeight','175');
+  assert.equal(a.get('drawingRequiredHint').hidden,true);
+  assert.ok(!a.get('sheet').textContent.includes('必要な寸法を入力'));
+  a.change('normalHanaKamiHeight','');
+  assert.equal(missing('normalHanaKamiHeight'),true);
+  assert.match(a.get('sheet').textContent,/必要な寸法を入力/);
+  a.change('normalHanaKamiHeight','175');assert.equal(missing('normalHanaKamiHeight'),false);
+});
+
+test('成の基準が未固定なら固定チェックを案内し、1つ固定すると候補の色をすべて消す',t=>{
+  const a=keraba(t);
+  const fixed=a.get('form').querySelector('[data-fixed-for="fixHafu"]');
+  fixed.checked=false;fixed.dispatchEvent(new a.w.Event('input',{bubbles:true}));
+  assert.equal(fixed.closest('.fixcheck').classList.contains('required-reference'),true);
+  assert.equal(a.get('normalHafuHeight').classList.contains('required-missing'),false);
+  assert.match(a.get('drawingRequiredHint').textContent,/固定/);
+  assert.match(a.get('sheet').textContent,/必要な寸法を入力/);
+  fixed.checked=true;fixed.dispatchEvent(new a.w.Event('input',{bubbles:true}));
+  assert.equal(a.get('form').querySelectorAll('.required-missing,.required-reference').length,0);
+  assert.equal(a.get('drawingRequiredHint').hidden,true);
+  assert.equal(a.get('btnPrintDwg').disabled,false);
+});
+
+test('瓦の不足する基準・オフセットを案内し、通常への切替と保存復元でも色付けを更新する',t=>{
+  const a=keraba(t);a.get('tabTile').click();
+  a.change('tileHanaSOffset','');
+  assert.equal(a.get('tileHanaSOffset').classList.contains('required-missing'),true);
+  const saved=a.doc();
+  const restored=keraba(t);restored.open(saved);
+  assert.equal(restored.get('tileHanaSOffset').classList.contains('required-missing'),true);
+  restored.change('tileHanaSOffset','0');assert.equal(restored.get('drawingRequiredHint').hidden,true);
+  a.change('tileHanaKRef','');assert.equal(a.get('tileHanaKRef').classList.contains('required-missing'),true);
+  a.change('hanaKami','none');assert.equal(a.get('tileHanaKRef').classList.contains('required-missing'),false);
+  a.get('tabNormal').click();assert.equal(a.get('form').querySelectorAll('.required-missing').length,0);
+  a.get('tabTile').click();assert.equal(a.get('tileHanaSOffset').classList.contains('required-missing'),true);
+  a.change('tileHanaSOffset','0');assert.equal(a.get('drawingRequiredHint').hidden,true);
+});
+
 test('新しい名前への保存は事前読込をせず1回の通信で完了し、同名の確認も追加読込をしない',async t=>{
   const remote=cloud(),a=keraba(t,{fetcher:remote.fetcher});
   a.get('btnSaveProject').click();a.get('projectSaveName').value='通信回数確認';await submit(a,'projectSaveForm');
