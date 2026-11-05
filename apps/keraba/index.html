@@ -1217,8 +1217,11 @@ function buildContent(p, g){
     if(!b.poly) return;
     o.push(`<g aria-label="${sg===1?'水下':'水上'}鼻隠し寸法">`);
     if(b.cut){                                   // 短い成・長い成・その差
-      dim2(b.short[0], b.short[1], sg*SIDE,       fmt(b.faceShort));
-      dim2(b.full [0], b.full [1], sg*(SIDE+EXTRA), fmt(b.face));
+      // 実際の辺から補助線を出し、寸法線は外面を基準に一定間隔で並べる。
+      const shortOff=sg*SIDE+(b.short[0][0]-b.outerX)*k;
+      const fullOff=sg*(SIDE+EXTRA)+(b.full[0][0]-b.outerX)*k;
+      dim2(b.short[0], b.short[1], shortOff, fmt(b.faceShort));
+      dim2(b.full[0], b.full[1], fullOff, fmt(b.face));
       dim2(b.gap  [0], b.gap  [1], sg*SIDE*0.42,  fmt(g.tHana*g.tan));
     } else {
       dim2(b.outer[0], b.outer[1], sg*SIDE, fmt(b.face));

@@ -104,7 +104,12 @@ test('上部・下部・上下カットの形と寸法線は実際の辺に一�
       near(b.gap[0][1],Math.min(...cutYs));near(b.gap[1][1],Math.max(...cutYs));
     }
     const svg=JSDOM.fragment(a.w.renderSVG(p));
-    for(const side of ['水下','水上'])assert.deepEqual([...svg.querySelector(`g[aria-label="${side}鼻隠し寸法"]`).querySelectorAll('text')].map(el=>el.textContent),['163','175','12']);
+    for(const side of ['水下','水上']){
+      const labels=[...svg.querySelector(`g[aria-label="${side}鼻隠し寸法"]`).querySelectorAll('text')];
+      assert.deepEqual(labels.map(el=>el.textContent),['163','175','12']);
+      const xs=labels.slice(0,2).map(el=>Number(el.getAttribute('transform').match(/translate\(([-\d.]+)/)[1]));
+      assert.ok(Math.abs(xs[0]-xs[1])>10,'長辺・短辺の寸法値の間隔を確保する');
+    }
     const rows=a.w.orderRows(p,g);
     const cuts=mode==='cut2'?rows.p1:rows.p2;
     assert.equal(cuts.length,2);
