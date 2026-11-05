@@ -83,6 +83,74 @@ function keraba(t, { blocked = false, fetcher, owner = 'a'.repeat(64), hash = ''
   };
 }
 
+test('上部・下部・上下カットの形と寸法線は実際の辺に一致する', t => {
+  const a=keraba(t), near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-8,`${actual} != ${expected}`);
+  for(const roofMode of ['normal','tile']) for(const mode of ['cut1','cutBottom','cut2']){
+    const p=Object.assign(a.w.eval('getParams()'),{roofMode,pitch:4,tHana:30,hanaShimo:mode,hanaKami:mode,
+      fixHanaShimo:true,fixHanaKami:true,hHanaShimoOrder:175,hHanaKamiOrder:175});
+    const g=a.w.geometry(p);
+    for(const b of [g.bS,g.bK]){
+      const [tl,tr,br,bl]=b.poly;
+      near(tr[1]-tl[1],mode==='cutBottom'?0:-12);
+      near(br[1]-bl[1],mode==='cut1'?0:-12);
+      near(bl[1]-tl[1],mode==='cutBottom'?175:163);
+      near(br[1]-tr[1],mode==='cut1'?175:163);
+      near(b.full[1][1]-b.full[0][1],175);
+      near(b.short[1][1]-b.short[0][1],163);
+      near(b.gap[1][1]-b.gap[0][1],12);
+      assert.ok([[tl,bl],[tr,br]].some(pair=>JSON.stringify(pair)===JSON.stringify(b.short)));
+      if(mode!=='cut2')assert.ok([[tl,bl],[tr,br]].some(pair=>JSON.stringify(pair)===JSON.stringify(b.full)));
+      const cutYs=(mode==='cutBottom'?[bl,br]:[tl,tr]).map(pt=>pt[1]);
+      near(b.gap[0][1],Math.min(...cutYs));near(b.gap[1][1],Math.max(...cutYs));
+    }
+    const svg=JSDOM.fragment(a.w.renderSVG(p));
+    for(const side of ['水下','水上'])assert.deepEqual([...svg.querySelector(`g[aria-label="${side}鼻隠し寸法"]`).querySelectorAll('text')].map(el=>el.textContent),['163','175','12']);
+    const rows=a.w.orderRows(p,g);
+    const cuts=mode==='cut2'?rows.p1:rows.p2;
+    assert.equal(cuts.length,2);
+    for(const row of cuts){assert.equal(row.B,175);assert.equal(row.C,12);assert.equal(row.D,163);assert.equal(row.B,row.C+row.D);}
+  }
+});
+
+test('下部のみの自動成と逆算は上下カットの勾配落ちを加えず、瓦の内外寸も実際の天端に合う', t => {
+  const a=keraba(t), near=(x,y)=>assert.ok(Math.abs(x-y)<1e-8,`${x} != ${y}`);
+  for(const roofMode of ['normal','tile']) for(const pitch of [1.33,4,12]) for(const side of ['inner','outer']) for(const dir of ['vertical','perpendicular']){
+    const p=Object.assign(a.w.eval('getParams()'),{roofMode,pitch,hanaShimo:'cutBottom',hanaKami:'cutBottom',fixHafu:true,
+      fixHanaShimo:false,fixHanaKami:false,tileHanaSSide:side,tileHanaKSide:side,tileHanaSDir:dir,tileHanaKDir:dir});
+    const g=a.w.geometry(p);
+    for(const [b,offset]of [[g.bS,g.offsets.shimo],[g.bK,g.offsets.kami]]){
+      for(const pt of [b.poly[2],b.poly[3]])near(pt[1],g.lnA(pt[0]));
+      const x=side==='inner'?b.innerX:b.outerX;
+      if(roofMode==='tile')near(b.poly[0][1],offset.guideLine(x));
+    }
+  }
+  const p=Object.assign(a.w.eval('getParams()'),{hanaShimo:'cutBottom',hanaKami:'none',pitch:4,fixHafu:false,
+    fixHanaShimo:true,hHanaShimoOrder:175});
+  const g=a.w.geometry(p);
+  near(g.wHafu,175/Math.sqrt(1+0.4**2));near(g.faceAutoS,175);
+});
+
+test('下部のみを通常・瓦で保存復元でき、発注書も一方加工の図と寸法になる', async t => {
+  const remote=cloud();
+  for(const mode of ['normal','tile']){
+    const a=keraba(t,{fetcher:remote.fetcher});
+    if(mode==='tile')a.get('tabTile').click();
+    for(const key of ['hanaShimo','hanaKami'])a.change(key,'cutBottom');
+    assert.match(a.get('sheetOrd').textContent,/②　下部のみ勾配加工/);
+    const doc=a.doc(),svg=a.svg();
+    const restored=keraba(t,{saved:{[mode]:doc.inputs}});
+    if(mode==='tile')restored.get('tabTile').click();
+    assert.deepEqual(restored.svg(),svg);
+    const imported=keraba(t);imported.open(doc);assert.deepEqual(imported.svg(),svg);
+    a.get('btnSaveProject').click();a.get('projectSaveName').value='下部加工確認_'+mode;await submit(a,'projectSaveForm');
+    const loaded=keraba(t,{fetcher:remote.fetcher});await openCloud(loaded,'下部加工確認_'+mode);
+    assert.deepEqual(loaded.svg(),svg);
+    a.change('hanaKami','cut1');
+    const order=a.get('sheetOrd').textContent;
+    assert.match(order,/上部のみ/);assert.match(order,/下部のみ/);
+  }
+});
+
 test('通常・瓦の勾配を丸めず表題へ表示し、勾配マークは横10に対する入力値を示す', t => {
   for (const mode of ['normal', 'tile']) {
     const a = keraba(t);

@@ -218,6 +218,7 @@
             <option value="kane">カネ</option>
             <option value="cut2">勾配カット(上下)</option>
             <option value="cut1">勾配カット(上部のみ)</option>
+            <option value="cutBottom">勾配カット(下部のみ)</option>
             <option value="none">無し</option>
           </select>
         </div>
@@ -227,6 +228,7 @@
             <option value="kane">カネ</option>
             <option value="cut2">勾配カット(上下)</option>
             <option value="cut1">勾配カット(上部のみ)</option>
+            <option value="cutBottom">勾配カット(下部のみ)</option>
             <option value="none">無し</option>
           </select>
         </div>
@@ -681,10 +683,11 @@ function geometry(p){
   const tHana   = Math.max(1, num(p.tHana,27));
 
   const hasHafu = (p.hafu !== 'none');     // 破風板を付けるか
-  const MODE = v => (v==='kane'||v==='none'||v==='cut1'||v==='cut2') ? v : 'tatsu';
+  const MODE = v => (v==='kane'||v==='none'||v==='cut1'||v==='cut2'||v==='cutBottom') ? v : 'tatsu';
   const modeS = MODE(p.hanaShimo);   // 水下
   const modeK = MODE(p.hanaKami);    // 水上
-  const isCut = m => (m==='cut1'||m==='cut2');
+  const isCut = m => (m==='cut1'||m==='cut2'||m==='cutBottom');
+  const hasFlatTop = m => m==='tatsu' || m==='cutBottom';
   const fixedValue = v => (v===null||v===undefined||!isFinite(v)) ? null : Math.max(10,v);
   const hOrderS = fixedValue(p.hHanaShimoOrder);
   const hOrderK = fixedValue(p.hHanaKamiOrder);
@@ -716,13 +719,13 @@ function geometry(p){
   const offHafu = topOffset(p.tileHafuRef, p.tileHafuDir, 'inner', p.tileHafuOffset);
   // タツの水下鼻隠しは上端が水平。内寸なら、方向に関係なく内側天端を基準線へ合わせる。
   const shimoInnerFaceAdjust =
-    (isTile && modeS==='tatsu' && p.tileHanaSSide!=='outer')
+    (isTile && hasFlatTop(modeS) && p.tileHanaSSide!=='outer')
       ? tHana*tan : 0;
   const offS = topOffset(p.tileHanaSRef, p.tileHanaSDir, p.tileHanaSSide, p.tileHanaSOffset,
                          shimoInnerFaceAdjust);
   // 水上のタツは、外寸なら外側天端を基準線へ合わせる。
   const kamiOuterFaceAdjust =
-    (isTile && modeK==='tatsu' && p.tileHanaKSide==='outer')
+    (isTile && hasFlatTop(modeK) && p.tileHanaKSide==='outer')
       ? tHana*tan : 0;
   const offK = topOffset(p.tileHanaKRef, p.tileHanaKDir, p.tileHanaKSide, p.tileHanaKOffset,
                          kamiOuterFaceAdjust);
@@ -737,6 +740,7 @@ function geometry(p){
     if(mode==='kane') return (lnAAt(0)-top.line(0))*cos;
     if(mode==='cut2') return lnAAt(x0)-top.line(x0)+tHana*tan;
     if(mode==='cut1') return lnAAt(x0)-top.line(x1);
+    if(mode==='cutBottom') return lnAAt(x0)-top.line(x0);
     return lnAAt(x1)-top.line(x0);           // タツ
   }
   // 固定されていない破風板は、固定された鼻隠し（水下を優先）へ下端が揃う成を逆算する。
@@ -782,24 +786,35 @@ function geometry(p){
   function makeBoard(mode, xOuter, into, face, top){  // into=+1:内側が水上向き(左端) / -1:(右端)
     if(mode==='none')
       return {mode, poly:null, innerX:xOuter, outerX:xOuter, aX:xOuter, bX:xOuter, face:0};
-    if(mode==='cut1' || mode==='cut2'){
+    if(isCut(mode)){
       const xi=xOuter+into*tHana, x0=Math.min(xOuter,xi), x1=Math.max(xOuter,xi);
       const dif = tHana*tan;                     // 厚み分の勾配落ち＝C
       const shortF = face - dif;                 // 短い方の成＝D
-      let poly, yb;
+      let poly, yb, short, full, gap;
       if(mode==='cut1'){                         // 上部のみ：上端は勾配なり、下端は水平
         yb = top.line(x1) + face;
         poly = [[x0,top.line(x0)],[x1,top.line(x1)],[x1,yb],[x0,yb]];
+        short = [poly[0],poly[3]];
+        full = [poly[1],poly[2]];
+        gap = [[xOuter,poly[1][1]],[xOuter,poly[0][1]]];
+      }else if(mode==='cutBottom'){              // 下部のみ：上端は水平、下端は勾配なり
+        const yt = top.line(x0);
+        yb = yt + face;
+        poly = [[x0,yt],[x1,yt],[x1,yt+shortF],[x0,yb]];
+        short = [poly[1],poly[2]];
+        full = [poly[0],poly[3]];
+        gap = [[xOuter,poly[2][1]],[xOuter,poly[3][1]]];
       }else{                                     // 上下：上端・下端とも勾配なり（平行四辺形）
         poly = [[x0,top.line(x0)],[x1,top.line(x1)],[x1,top.line(x1)+shortF],[x0,top.line(x0)+shortF]];
         yb = top.line(x0)+shortF;                // いちばん下（x0側の下端）
+        short = xOuter===x0 ? [poly[0],poly[3]] : [poly[1],poly[2]];
+        full = [[xOuter,poly[1][1]],[xOuter,poly[3][1]]];
+        gap = [[xOuter,poly[1][1]],[xOuter,poly[0][1]]];
       }
       return {mode, cut:true, cutBoth:(mode==='cut2'),
               poly, diag:[poly[0],poly[2]],
-              short:[[xOuter,top.line(x1)],[xOuter,top.line(x1)+shortF]],   // 短い方の成＝D
-              full :[[xOuter,top.line(x1)],[xOuter,yb]],                     // 長い方＝B（発注寸法）
-              gap  :[[xOuter,top.line(x0)],[xOuter,top.line(x1)]],          // 差＝C
-              outer:[[xOuter,top.line(x1)],[xOuter,yb]],
+              short, full, gap,                // 実際の短辺・長辺と、切った側の勾配落ち
+              outer:full,
               thick:[[x0,yb],[x1,yb]],          // 厚みは水平に測る（勾配はつかない）
               outDir:[0,1], innerX:xi, outerX:xOuter,
               face, faceShort:shortF,
@@ -1200,6 +1215,7 @@ function buildContent(p, g){
   const dim2=(a,b,off,label)=>{const A=P2(a),B=P2(b); dim(A[0],A[1],B[0],B[1],off,label);};
   if(p.dHana) [[g.bS,1],[g.bK,-1]].forEach(([b,sg])=>{
     if(!b.poly) return;
+    o.push(`<g aria-label="${sg===1?'水下':'水上'}鼻隠し寸法">`);
     if(b.cut){                                   // 短い成・長い成・その差
       dim2(b.short[0], b.short[1], sg*SIDE,       fmt(b.faceShort));
       dim2(b.full [0], b.full [1], sg*(SIDE+EXTRA), fmt(b.face));
@@ -1207,6 +1223,7 @@ function buildContent(p, g){
     } else {
       dim2(b.outer[0], b.outer[1], sg*SIDE, fmt(b.face));
     }
+    o.push('</g>');
   });
   // 鼻隠し厚
   if(p.dThick){
@@ -1302,9 +1319,9 @@ function orderRows(p, g){
   const RI = v => Math.round(v);
   // 瓦は、鼻隠しの小数成も破風板と同じく切り上げて不足を防ぐ。
   const orderInt = v => g.isTile ? Math.ceil(v-1e-9) : RI(v);
-  const putCut = (sec, sp, thick, seiShort, len, qty)=>{
+  const putCut = (sec, sp, thick, seiShort, len, qty, cutSide='top')=>{
     const A = RI(thick), C = orderInt(thick*g.tan), D = orderInt(seiShort);
-    rows[sec].push({sp, A, B:D+C, C, D, len, qty});
+    rows[sec].push({sp, A, B:D+C, C, D, len, qty, cutSide});
   };
   const putFlat = (sp, thick, sei, len, qty)=>
     rows.p3.push({sp, A:RI(thick), B:orderInt(sei), C:'', D:'', len, qty});
@@ -1317,7 +1334,7 @@ function orderRows(p, g){
   [[g.bS, p.ordHanaSSp, p.ordHanaSLen, p.ordHanaSQty],
    [g.bK, p.ordHanaKSp, p.ordHanaKLen, p.ordHanaKQty]].forEach(([b,sp,len,qty])=>{
     if(b.mode==='none') return;
-    if(b.cut) putCut(b.cutBoth?'p1':'p2', sp, g.tHana, b.faceShort, len, qty);
+    if(b.cut) putCut(b.cutBoth?'p1':'p2', sp, g.tHana, b.faceShort, len, qty, b.mode==='cutBottom'?'bottom':'top');
     else      putFlat(sp, g.tHana, b.face, len, qty);
   });
   return rows;
@@ -1352,12 +1369,15 @@ function renderOrderSVG(p){
       AR(x2+13, dy+BD, x2+13, yb);      T(x2+16,  dy+(BD+BH)/2+1.8, 'D', 5.0);
       AR(x2+5,  dy,    x2+5,  dy+BD);   T(x2+7.5, dy+BD/2+1.8,      'C', 4.6);
       AR(dx-4,  dy+BH, dx-4,  yb);      T(dx-6.5, dy+BH+BD/2+1.8,   'C', 4.6, 'end');
-    } else if(kind==='p2'){                        // 一方のみ：台形
-      PG([[dx,dy],[x2,dy+BD],[x2,yb],[dx,yb]]);
-      [dy, dy+BD, yb].forEach(dot);
+    } else if(kind==='p2' || kind==='p2Bottom'){    // 一方のみ：切る側に合わせた台形
+      const bottom=kind==='p2Bottom';
+      PG(bottom ? [[dx,dy],[x2,dy],[x2,yb],[dx,dy+BH]] : [[dx,dy],[x2,dy+BD],[x2,yb],[dx,yb]]);
+      [dy, bottom?dy+BH:dy+BD, yb].forEach(dot);
       AR(dx-10, dy,    dx-10, yb);      T(dx-13,  dy+(BD+BH)/2+1.8, 'B', 5.0, 'end');
-      AR(x2+13, dy+BD, x2+13, yb);      T(x2+16,  dy+(BD+BH)/2+1.8, 'D', 5.0);
-      AR(x2+5,  dy,    x2+5,  dy+BD);   T(x2+7.5, dy+BD/2+1.8,      'C', 4.6);
+      AR(x2+13, bottom?dy:dy+BD, x2+13, bottom?dy+BH:yb);
+      T(x2+16, bottom?dy+BH/2+1.8:dy+(BD+BH)/2+1.8, 'D', 5.0);
+      AR(x2+5, bottom?dy+BH:dy, x2+5, bottom?yb:dy+BD);
+      T(x2+7.5, bottom?dy+BH+BD/2+1.8:dy+BD/2+1.8, 'C', 4.6);
     } else {                                       // 仕上げ・粗寸法：矩形
       PG([[dx,dy],[x2,dy],[x2,yb],[dx,yb]]);
       [dy, yb].forEach(dot);
@@ -1367,9 +1387,9 @@ function renderOrderSVG(p){
   }
 
   /* ---------- 表 ---------- */
-  function table(cols, heads, list, hb){
+  function table(cols, heads, list, hb, showCutSide=false){
     const RH=11, nrow=4;
-    heads.forEach((h,i)=> T((cols[i]+cols[i+1])/2, hb, h, 4.2, 'middle', 700));
+    heads.forEach((h,i)=> T((cols[i]+cols[i+1])/2, hb, h, showCutSide&&i===0?3.3:4.2, 'middle', 700));
     L(cols[0], hb+2.6, cols[cols.length-1], hb+2.6, 0.5);
     for(let r=0;r<nrow;r++){
       const it=list[r], base=hb+2.6+RH*(r+1);
@@ -1377,7 +1397,14 @@ function renderOrderSVG(p){
         const v = (cols.length===8)
           ? [it.sp, it.A+'×', it.B, it.C, it.D, it.len, it.qty]
           : [it.sp, it.A+'×', it.B, it.len, it.qty];
-        v.forEach((t,i)=> T((cols[i]+cols[i+1])/2, base-3.6, (t===''||t===undefined)?'':String(t), 4.8, 'middle'));
+        v.forEach((t,i)=>{
+          const x=(cols[i]+cols[i+1])/2;
+          if(showCutSide && i===0){
+            const side=it.cutSide==='bottom'?'下部のみ':'上部のみ';
+            if(t){ T(x,base-6.5,t,3.3,'middle'); T(x,base-1.8,side,3.3,'middle'); }
+            else T(x,base-3.6,side,3.8,'middle');
+          }else T(x,base-3.6,(t===''||t===undefined)?'':String(t),4.8,'middle');
+        });
       }
       L(cols[0], base, cols[cols.length-1], base, 0.2);
     }
@@ -1386,17 +1413,19 @@ function renderOrderSVG(p){
   const C7 = [84,104,122,140,156,174,186,198];     // 樹種 A B C D 材長 枚数
   const C5 = [84,110,134,158,178,198];             // 樹種 A B 材長 枚数
   const rows = orderRows(p, g);
+  const bottomOnly=rows.p2.length>0 && rows.p2.every(row=>row.cutSide==='bottom');
+  const topOnly=rows.p2.length>0 && rows.p2.every(row=>row.cutSide==='top');
   const SEC = [
     {k:'p1', t:'①　上下勾配加工',                        y: 20},
-    {k:'p2', t:'②　一方のみ勾配加工',                    y:112},
+    {k:'p2', t:bottomOnly?'②　下部のみ勾配加工':topOnly?'②　上部のみ勾配加工':'②　一方のみ勾配加工', y:112},
     {k:'p3', t:'③　仕上げ寸法（ﾌﾟﾚｰﾅｰ加工有）・粗寸法',  y:204}
   ];
   SEC.forEach(sc=>{
     L(12, sc.y-7, 198, sc.y-7, 0.7);
     T(14, sc.y, sc.t, 5.4, 'start', 700);
-    diagram(sc.k, 40, sc.y+13);
+    diagram(sc.k==='p2'&&bottomOnly?'p2Bottom':sc.k, 40, sc.y+13);
     if(sc.k==='p3') table(C5, ['樹種','A','B','材長','枚数'], rows.p3, sc.y+17);
-    else            table(C7, ['樹種','A','B','C','D','材長','枚数'], rows[sc.k], sc.y+17);
+    else            table(C7, [sc.k==='p2'?'樹種・加工':'樹種','A','B','C','D','材長','枚数'], rows[sc.k], sc.y+17, sc.k==='p2');
   });
   L(12, 285, 198, 285, 0.7);
 
