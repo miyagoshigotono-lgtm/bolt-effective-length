@@ -156,6 +156,26 @@ test('下部のみを通常・瓦で保存復元でき、発注書も一方加�
   }
 });
 
+test('水下カネと水上下部カットは同じ勾配直角オフセットで天端の勾配線へ揃う',t=>{
+  const a=keraba(t),near=(x,y)=>assert.ok(Math.abs(x-y)<1e-8,`${x} != ${y}`);
+  a.get('tabTile').click();
+  for(const [key,value]of Object.entries({pitch:'1.5',tNoji:'9',hTaruki:'45',hanaShimo:'kane',hanaKami:'cutBottom',
+    tileHafuOffset:'18',tileHanaShimoWidth:'27',
+    tileHanaSRef:'noji',tileHanaSDir:'perpendicular',tileHanaSOffset:'35',
+    tileHanaKRef:'noji',tileHanaKDir:'perpendicular',tileHanaKSide:'inner',tileHanaKOffset:'35',
+    tileHanaShimoHeight:'175'}))a.change(key,value);
+  const p=a.w.eval('getParams()'),g=a.w.geometry(p);
+  near(g.bS.face,175);
+  near((g.lnC(0)-g.offsets.shimo.guideLine(0))*g.cos,35);
+  near(g.bK.poly[0][1],g.offsets.shimo.guideLine(g.bK.innerX));
+  near(g.bK.poly[0][1],g.bK.poly[1][1]);
+  near(g.bK.face,175*Math.sqrt(1+0.15**2));
+  near(g.bK.faceShort,g.bK.face-4.05);
+  near(g.bK.gap[1][1]-g.bK.gap[0][1],4.05);
+  near(g.wHafu,158);
+  assert.equal(a.get('drawingRequiredHint').hidden,true);
+});
+
 test('通常・瓦の勾配を丸めず表題へ表示し、勾配マークは横10に対する入力値を示す', t => {
   for (const mode of ['normal', 'tile']) {
     const a = keraba(t);
