@@ -156,6 +156,33 @@ test('下部のみを通常・瓦で保存復元でき、発注書も一方加�
   }
 });
 
+test('合板の出は鼻隠しの天端位置によらず垂木先端から測り、0なら先端で止まる',t=>{
+  const a=keraba(t),near=(x,y)=>assert.ok(Math.abs(x-y)<1e-8,`${x} != ${y}`);
+  for(const roofMode of ['normal','tile']) for(const mode of ['kane','tatsu','cut1','cutBottom','cut2','none'])
+  for(const pitch of [1.33,4]) for(const dir of ['vertical','perpendicular']) for(const out of [-25,0,67]){
+    const p=Object.assign(a.w.eval('getParams()'),{roofMode,pitch,hanaShimo:mode,hanaKami:mode,
+      tileHanaSRef:'noji',tileHanaKRef:'taruki',tileHanaSDir:dir,tileHanaKDir:dir,
+      tileHanaSOffset:40,tileHanaKOffset:24,ovShimo:out,ovKami:out});
+    const g=a.w.geometry(p);
+    for(const [b,end]of [[g.bS,g.rafterS],[g.bK,g.rafterK]]){
+      near(end.top[1],g.lnD(end.top[0]));near(end.bottom[1],g.lnB(end.bottom[0]));
+      if(b.poly){
+        const [top,bottom]=b.mode!=='kane' && b.innerX===b.poly[0][0]
+          ? [b.poly[0],b.poly[3]] : [b.poly[1],b.poly[2]];
+        const [x,y]=top, [xb,yb]=bottom;
+        for(const pt of [end.top,end.bottom])near((pt[0]-x)*(yb-y)-(pt[1]-y)*(xb-x),0);
+      }else near(end.top[0],b.outerX);
+    }
+    near((g.rafterS.top[0]-g.endLD[0])/g.cos,out);
+    near((g.endRD[0]-g.rafterK.top[0])/g.cos,out);
+    near(Math.hypot(g.endLC[0]-g.endLD[0],g.endLC[1]-g.endLD[1]),g.tNoji);
+    near(Math.hypot(g.endRC[0]-g.endRD[0],g.endRC[1]-g.endRD[1]),g.tNoji);
+    if(roofMode==='tile' && mode==='kane')assert.ok(g.rafterS.top[0]>g.bS.innerX+1);
+  }
+  const p=Object.assign(a.w.eval('getParams()'),{roofMode:'tile',hanaShimo:'kane',ovShimo:67});
+  assert.ok(!/NaN|Infinity/.test(a.w.renderSVG(p)));
+});
+
 test('水下カネと水上下部カットは同じ勾配直角オフセットで天端の勾配線へ揃う',t=>{
   const a=keraba(t),near=(x,y)=>assert.ok(Math.abs(x-y)<1e-8,`${x} != ${y}`);
   a.get('tabTile').click();

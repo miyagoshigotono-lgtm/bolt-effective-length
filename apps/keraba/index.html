@@ -786,7 +786,7 @@ function geometry(p){
   //   タツ：厚みは水平、見付は鉛直。左上角が垂木天に乗る。
   //   カネ：厚みは勾配方向、見付は勾配直角。上辺が垂木天、下辺が破風板下端に一致。
   //   無し：板を描かない（切妻の水上どうしなど）。垂木木口＝図の端とみなす。
-  //   innerX＝内面（＝垂木の木口）が垂木天と交わる x。合板の出はここが基準。
+  //   innerX＝鼻隠し天端の内側の x。カネはオフセットにより垂木木口の位置と異なる。
   function makeBoard(mode, xOuter, into, face, top){  // into=+1:内側が水上向き(左端) / -1:(右端)
     if(mode==='none')
       return {mode, poly:null, innerX:xOuter, outerX:xOuter, aX:xOuter, bX:xOuter, face:0};
@@ -846,11 +846,20 @@ function geometry(p){
   const bK = makeBoard(modeK, totalW, -1, faceK, offK);
   const hK = faceK;
 
+  // カネの鼻隠し内面と垂木の交点を求める。鼻隠し天端の位置は基準にしない。
+  const rafterEnd = b => {
+    const at = line => b.mode==='kane'
+      ? b.innerX+(line(b.innerX)-b.poly[1][1])*sin*cos : b.innerX;
+    const x=at(lnD), bottomX=at(lnB);
+    return {top:[x,lnD(x)], bottom:[bottomX,lnB(bottomX)]};
+  };
+  const rafterS=rafterEnd(bS), rafterK=rafterEnd(bK);
+
   // 合板（野地板）の端部は常にカネ＝合板に対して直角。
   // 出は「垂木の木口（＝鼻隠し内面）から合板先端まで」を合板下端ラインに沿って測る。
   // 天端の端点は直角方向へ板厚ぶん寄るため、x が tNoji*sin だけ水下側にずれる。
-  const xEndL = bS.innerX - (capS ? ovS*cos : 0);
-  const xEndR = bK.innerX + (capK ? ovK*cos : 0);
+  const xEndL = rafterS.top[0] - (capS ? ovS*cos : 0);
+  const xEndR = rafterK.top[0] + (capK ? ovK*cos : 0);
   const endLD = [xEndL, lnD(xEndL)];
   const endRD = [xEndR, lnD(xEndR)];
   // 切るときだけ天端が直角方向へずれる。切らないときは垂木木口で真っ直ぐ止める
@@ -877,7 +886,7 @@ function geometry(p){
   const hafuOrderW = (isTile && !fixHafu) ? Math.ceil(wHafu-1e-9) : wHafu;
   return {pitch,tan,th,cos,sin,tNoji,hTaruki,tHafu,wHafu,hafuOrderW,tHana,hHana,hTatsu,hasHafu,
           moyaSize,notchRef,moya,totalW,L,ovS,ovK,xEndL,xEndR,endLD,endLC,endRD,endRC,
-          modeS,modeK,bS,bK,hS,hK,clearance,capS,capK,
+          modeS,modeK,bS,bK,rafterS,rafterK,hS,hK,clearance,capS,capK,
           lnA,lnB,lnC,lnD,lnHafu,lnCut,dimMoya,dimMoyaShort,isTile,
           offsets:{hafu:offHafu, shimo:offS, kami:offK},
           faceAutoS:autoS, faceAutoK:autoK,
@@ -954,6 +963,9 @@ function buildContent(p, g){
   const xs = [g.endLC[0], g.endLD[0], g.endRC[0], g.endRD[0], g.moya.xL, g.moya.xR];
   const ys = [g.endLC[1], g.endLD[1], g.endRC[1], g.endRD[1],
               g.moya.yT, g.moya.yT+g.moyaSize];
+  for(const pt of [g.rafterS.top,g.rafterS.bottom,g.rafterK.top,g.rafterK.bottom]){
+    xs.push(pt[0]); ys.push(pt[1]);
+  }
   [g.bS,g.bK].forEach(b=>{ if(b.poly) b.poly.forEach(q=>{ xs.push(q[0]); ys.push(q[1]); }); });
   if(g.hasHafu) [g.bS.aX,g.bK.aX].forEach(x=>{ xs.push(x); ys.push(g.lnA(x)); });
   // 瓦の点線ガイドと天端位置も縮尺計算へ含め、用紙端からはみ出さないようにする。
@@ -1098,12 +1110,12 @@ function buildContent(p, g){
   };
   seg(g.endLC,g.endRC,W_OUT);                                                  // 野地板天
   // 垂木天は合板の出がマイナスでも鼻隠しまで通す（合板下端と同じライン）
-  const dL = g.isTile ? g.bS.innerX : Math.min(g.endLD[0], 0);
-  const dR = g.isTile ? g.bK.innerX : Math.max(g.endRD[0], g.totalW);
+  const dL = Math.min(g.endLD[0], g.rafterS.top[0]);
+  const dR = Math.max(g.endRD[0], g.rafterK.top[0]);
   line(PX(dL),PY(g.lnD(dL)), PX(dR),PY(g.lnD(dR)), W_OUT);                    // 野地板下端＝垂木天
   if(g.capS) seg(g.endLD,g.endLC,W_OUT);                                       // 水下小口（カネ＝合板に直角）
   if(g.capK) seg(g.endRD,g.endRC,W_OUT);                                       // 水上小口（カネ＝合板に直角）
-  line(PX(g.bS.bX),PY(g.lnB(g.bS.bX)),PX(g.bK.bX),PY(g.lnB(g.bK.bX)),W_OUT);   // 垂木下端
+  seg(g.rafterS.bottom,g.rafterK.bottom,W_OUT);                               // 垂木下端
   // 水上の鼻隠しが無し＝外壁に当たる／切妻で垂木同士が合わさる。
   // 垂木（と破風板）の端をタツ（鉛直）で切った線で閉じる
   if(g.modeK==='none'){
@@ -1275,10 +1287,10 @@ function buildContent(p, g){
   // マイナスのときは寸法線の向きが反転するので、逃がす側も合わせて反転させる
   if(p.dOverS && g.capS && Math.abs(g.ovS) > 0.01)
     dim(PX(g.endLD[0]),PY(g.endLD[1]),
-        PX(g.bS.innerX),PY(g.lnD(g.bS.innerX)),
+        PX(g.rafterS.top[0]),PY(g.rafterS.top[1]),
         g.ovS >= 0 ? ovOff : -ovOff, fmt(Math.abs(g.ovS)));
   if(p.dOverK && g.capK && Math.abs(g.ovK) > 0.01)
-    dim(PX(g.bK.innerX),PY(g.lnD(g.bK.innerX)),
+    dim(PX(g.rafterK.top[0]),PY(g.rafterK.top[1]),
         PX(g.endRD[0]),PY(g.endRD[1]),
         g.ovK >= 0 ? ovOff : -ovOff, fmt(Math.abs(g.ovK)));
 
