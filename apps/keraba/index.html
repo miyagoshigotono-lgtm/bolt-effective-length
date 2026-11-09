@@ -303,7 +303,9 @@
       <fieldset>
         <legend>母屋</legend>
         <div class="row"><label>母屋 寸法（角）</label><input type="number" id="moyaSize" value="105" step="1"><span class="unit">mm</span></div>
-        <div class="row"><label>垂木欠き（母屋芯から）</label><input type="number" id="notchRef" value="22.5" step="0.5"><span class="unit">mm</span></div>
+        <div class="row"><label for="notchType">垂木欠きの種類</label><select id="notchType"><option value="center" selected>通常（母屋芯から）</option><option value="techno">テクノ（上角から10 mm）</option></select></div>
+        <div class="row" id="notchCenterRow"><label for="notchRef">垂木欠き（母屋芯から）</label><input type="number" id="notchRef" value="22.5" step="0.5"><span class="unit">mm</span></div>
+        <p id="technoNotchHint" class="required-hint" hidden>母屋の水下側の上角から、鉛直に10 mm欠きます。</p>
       </fieldset>
 
       <fieldset>
@@ -338,7 +340,7 @@
         <div class="boxgrp"><b>母屋</b><div class="chkgrid">
           <label class="chk"><input type="checkbox" id="dMoyaW" checked>母屋寸法</label>
           <label class="chk"><input type="checkbox" id="dCenter" checked>母屋芯線</label>
-          <label class="chk"><input type="checkbox" id="d225" checked>芯から22.5</label>
+          <label class="chk"><input type="checkbox" id="d225" checked>垂木欠き寸法</label>
         </div></div>
 
         <div class="boxgrp"><b>ケラバカット</b><div class="chkgrid">
@@ -446,7 +448,7 @@ const FIELDS = {
   hHanaKamiOrder:'num', hHanaShimoOrder:'num',
   tileHanaSOrder:'num', tileHafuAuto:'bool',
   fixHafu:'bool', fixHanaKami:'bool', fixHanaShimo:'bool',
-  moyaSize:'num', notchRef:'num',
+  moyaSize:'num', notchType:'text', notchRef:'num',
   total:'num', ovShimo:'num', ovKami:'num', hafu:'text', hanaShimo:'text', hanaKami:'text',
   clearance:'num',
   tileHafuRef:'text', tileHafuDir:'text', tileHafuOffset:'num',
@@ -468,7 +470,7 @@ const DEFAULTS = {
   hHanaKamiOrder:null, hHanaShimoOrder:null,
   tileHanaSOrder:175, tileHafuAuto:true,
   fixHafu:true, fixHanaKami:false, fixHanaShimo:false,
-  moyaSize:105, notchRef:22.5,
+  moyaSize:105, notchType:'center', notchRef:22.5,
   total:500, ovShimo:82, ovKami:58, hafu:'on', hanaShimo:'tatsu', hanaKami:'tatsu',
   clearance:0,
   tileHafuRef:'noji', tileHafuDir:'perpendicular', tileHafuOffset:20,
@@ -597,12 +599,15 @@ function parseProjectDocument(text){
     throw new Error('この形式は開けません。ケラバで保存したJSONファイルを選んでください。');
   if(!['normal','tile'].includes(doc.roofMode) || !doc.inputs || typeof doc.inputs!=='object' || Array.isArray(doc.inputs))
     throw new Error('保存ファイルの屋根種類または入力が正しくありません。');
+  // 種類追加前の保存データは、従来の母屋芯基準として開く。元データは変更しない。
+  const storedInputs={...doc.inputs};
+  if(!Object.prototype.hasOwnProperty.call(storedInputs,'notchType')) storedInputs.notchType='center';
   const fields=Object.keys(FIELDS).filter(key=>document.getElementById(key));
-  if(Object.keys(doc.inputs).some(key=>!fields.includes(key)) || fields.some(key=>!Object.prototype.hasOwnProperty.call(doc.inputs,key)))
+  if(Object.keys(storedInputs).some(key=>!fields.includes(key)) || fields.some(key=>!Object.prototype.hasOwnProperty.call(storedInputs,key)))
     throw new Error('保存ファイルの入力項目が一致しません。入力は変更していません。');
   const inputs={};
   for(const key of fields){
-    const value=doc.inputs[key], type=FIELDS[key], el=document.getElementById(key);
+    const value=storedInputs[key], type=FIELDS[key], el=document.getElementById(key);
     const valid=type==='num' ? value===null || (typeof value==='number' && Number.isFinite(value) && Math.abs(value)<=Number.MAX_SAFE_INTEGER)
                 : type==='bool' ? typeof value==='boolean' : typeof value==='string';
     if(!valid || (typeof value==='string' && value.length>10000))
@@ -773,7 +778,7 @@ function geometry(p){
   const hHana = hTatsu;
 
   const moyaSize = Math.max(10, num(p.moyaSize,105));
-  const notchRef = num(p.notchRef,22.5);      // 母屋芯から水下側へ
+  const notchType = p.notchType==='techno' ? 'techno' : 'center';
   // 垂木の木口が基準。マイナスなら木口より内側で合板を止める。
   // 空欄（null）なら「合板を切らない」＝垂木と同じ長さで線を止め、小口も寸法も描かない
   const orNull = v => (v===null||v===undefined||!isFinite(v)) ? null : v;
@@ -873,8 +878,11 @@ function geometry(p){
   // 母屋（1本・図の中央）
   const xc      = totalW/2;
   const xL      = xc - moyaSize/2;
-  const xNotch  = xc - notchRef;            // 垂木欠き位置
-  const moya    = { xL, xR:xL+moyaSize, xc, xNotch, yT: lnB(xNotch) };
+  // テクノは水下側上角から鉛直10 mm。母屋芯基準の入力値は使用しない。
+  const yT = notchType==='techno' ? lnB(xL)-10 : lnB(xc-num(p.notchRef,22.5));
+  const xNotch = notchType==='techno' ? xL+10/tan : xc-num(p.notchRef,22.5);
+  const notchRef = xc-xNotch;
+  const moya = {xL, xR:xL+moyaSize, xc, xNotch, yT};
 
   // ケラバカット寸法は、天端オフセット後の実際の位置から求める。
   const dimMoya = lnCut(moya.xL) - moya.yT;
@@ -885,7 +893,7 @@ function geometry(p){
   // 瓦の自動計算で生じた小数は、板が不足しないよう発注寸法を必ず切り上げる。
   const hafuOrderW = (isTile && !fixHafu) ? Math.ceil(wHafu-1e-9) : wHafu;
   return {pitch,tan,th,cos,sin,tNoji,hTaruki,tHafu,wHafu,hafuOrderW,tHana,hHana,hTatsu,hasHafu,
-          moyaSize,notchRef,moya,totalW,L,ovS,ovK,xEndL,xEndR,endLD,endLC,endRD,endRC,
+          moyaSize,notchType,notchRef,moya,totalW,L,ovS,ovK,xEndL,xEndR,endLD,endLC,endRD,endRC,
           modeS,modeK,bS,bK,rafterS,rafterK,hS,hK,clearance,capS,capK,
           lnA,lnB,lnC,lnD,lnHafu,lnCut,dimMoya,dimMoyaShort,isTile,
           offsets:{hafu:offHafu, shimo:offS, kami:offK},
@@ -948,6 +956,7 @@ function buildContent(p, g){
     if(okS) noteLines.push(`${okK?'水下':''}鼻隠し：${fmt(g.tHana)}ｘ${fmt(g.hHanaOrderS)}`);
     if(okK) noteLines.push(`${okS?'水上':''}鼻隠し：${fmt(g.tHana)}ｘ${fmt(g.hHanaOrderK)}`);
   }
+  if(g.notchType==='techno') noteLines.push('垂木欠き：テクノ（鉛直10 mm）');
   const noteStep = F_NOTE*1.35;
   const yNote2 = SH - 9;
   const footT  = yNote2 - (noteLines.length-1)*noteStep - F_NOTE - 5;
@@ -1223,7 +1232,8 @@ function buildContent(p, g){
     const cut = clipBelow([[M.xL,M.yT],[M.xR,M.yT],[M.xR,M.yT+g.moyaSize],[M.xL,M.yT+g.moyaSize]], g.lnCut);
     if(cut.length>2) poly(cut.map(q=>[PX(q[0]),PY(q[1])]), W_OUT, 'url(#hatch)');
   }
-  line(PX(M.xNotch),PY(M.yT),PX(M.xNotch),PY(M.yT+g.moyaSize),W_OUT);   // 垂木欠きライン
+  // テクノは上角からの深さを示し、母屋芯からの欠き位置線は描かない。
+  if(g.notchType==='center') line(PX(M.xNotch),PY(M.yT),PX(M.xNotch),PY(M.yT+g.moyaSize),W_OUT);
   if(p.dCenter) line(PX(M.xc),PY(M.yT)-2,PX(M.xc),PY(M.yT+g.moyaSize)+2,W_DIM,'6 1.6 1.2 1.6');
 
   /* ---- 寸法 ---- */
@@ -1255,8 +1265,14 @@ function buildContent(p, g){
   // 母屋まわり
   if(p.dMoya  && g.hasHafu) dim(PX(M.xL),PY(M.yT), PX(M.xL),PY(g.lnCut(M.xL)),  OFF, fmt(g.dimMoya));
   if(p.dShort && g.hasHafu) dim(PX(M.xR),PY(M.yT), PX(M.xR),PY(g.lnCut(M.xR)), -OFF, fmt(g.dimMoyaShort));
-  if(p.d225 && Math.abs(g.notchRef)>0.05)
-    dim(PX(M.xNotch),PY(M.yT), PX(M.xc),PY(M.yT), -OFF, fmt(g.notchRef));
+  if(p.d225){
+    if(g.notchType==='techno'){
+      o.push('<g aria-label="テクノ欠き 鉛直10 mm">');
+      dim(PX(M.xL),PY(M.yT), PX(M.xL),PY(g.lnB(M.xL)), OFF*2.4, '10');
+      o.push('</g>');
+    }else if(Math.abs(g.notchRef)>0.05)
+      dim(PX(M.xNotch),PY(M.yT), PX(M.xc),PY(M.yT), -OFF, fmt(g.notchRef));
+  }
   if(p.dMoyaW)
     dim(PX(M.xL),PY(M.yT+g.moyaSize), PX(M.xR),PY(M.yT+g.moyaSize), OFF, fmt(g.moyaSize));
 
@@ -1503,6 +1519,10 @@ function syncMaterialInputs(p,g){
 
 // 使わない部材の寸法欄は入力できないようにする
 function updateEnabled(p){
+  const techno=p.notchType==='techno';
+  $('notchCenterRow').hidden=techno;
+  $('notchRef').disabled=techno;
+  $('technoNotchHint').hidden=!techno;
   const off = (id, disabled)=>{
     const el = $(id);
     if(!el) return;
@@ -1574,8 +1594,9 @@ function updatePrintWarning(p,g){
 }
 
 function getDrawingInputState(p){
-  const keys=['pitch','tNoji','hTaruki','moyaSize','notchRef','ovShimo','ovKami'];
-  const requiredChoices=['hafu','hanaShimo','hanaKami'];
+  const keys=['pitch','tNoji','hTaruki','moyaSize','ovShimo','ovKami'];
+  const requiredChoices=['hafu','hanaShimo','hanaKami','notchType'];
+  if(p.notchType!=='techno') keys.push('notchRef');
   if(p.hafu!=='none') keys.push('tHafu','clearance');
   if(p.hanaShimo!=='none' || p.hanaKami!=='none') keys.push('tHana');
   if(p.fixHafu && p.hafu!=='none') keys.push('wHafu');
