@@ -1864,7 +1864,7 @@ $('projectFile').onchange = ()=>{
    ========================================================= */
 // 統合版の更新・オフライン保存は、入口のService Workerへ一本化する。
 const INTEGRATED_BUILD = true;
-const APP_VERSION = '1.0.21';
+const APP_VERSION = '1.0.22';
 document.getElementById('ver').textContent = '統合版';
 
 if(!INTEGRATED_BUILD && 'serviceWorker' in navigator && location.protocol.startsWith('http')){
