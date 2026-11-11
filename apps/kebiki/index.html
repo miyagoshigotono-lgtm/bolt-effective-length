@@ -35,6 +35,7 @@ input:focus, select:focus { outline:2px solid #bcd8f7; border-color:var(--accent
 .number-choice select { position:absolute; top:0; right:0; height:100%; width:34px; padding:0; border-radius:0 5px 5px 0; appearance:none; color:transparent; cursor:pointer; background:#f0f5fc url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6' fill='none' stroke='%23124680' stroke-width='2'/%3E%3C/svg%3E") no-repeat center; }
 .number-choice option { color:var(--ink); font-size:18px; background:#fff; }
 .field-error { margin:0 0 8px; color:#a51919; font-size:15px; font-weight:600; }
+.hint { margin:8px 0 0; color:var(--sub); font-size:15px; line-height:1.6; }
 [hidden] { display:none!important; }
 button { padding:8px 16px; border:1px solid var(--line); border-radius:5px; color:var(--ink); background:#fff; font:inherit; font-size:16px; font-weight:700; cursor:pointer; }
 button:hover { background:#eef4fc; }
@@ -55,6 +56,7 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .stage { flex:1; overflow:auto; padding:22px; display:flex; flex-direction:column; align-items:center; }
 .sheet { width:100%; max-width:1000px; flex:none; padding:36px; background:#fff; box-shadow:0 3px 16px rgba(20,40,70,.20); }
 .sheet h2 { margin:0 0 30px; font-size:24px; text-align:center; }
+.result-condition { margin:-14px 0 24px; color:var(--sub); font-size:16px; line-height:1.6; text-align:center; }
 .results { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:20px; }
 .result { min-width:0; padding:24px; border:1px solid var(--line); border-top:5px solid var(--accent); border-radius:6px; background:#fbfcfe; }
 .result .title { margin:0; color:var(--accent2); font-size:22px; font-weight:700; }
@@ -137,6 +139,16 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
           <span class="unit" aria-hidden="true">mm</span>
         </div>
         <p id="taruki-error" class="field-error" role="alert" hidden></p>
+        <div class="row">
+          <label for="notchType">垂木欠きの種類</label>
+          <select id="notchType" aria-describedby="notchType-error">
+            <option value="" disabled>選択してください</option>
+            <option value="center" selected>通常</option>
+            <option value="techno">テクノ</option>
+          </select>
+        </div>
+        <p id="notchType-error" class="field-error" role="alert" hidden></p>
+        <p id="techno-hint" class="hint" hidden>母屋の水下側上角から、鉛直に10 mm欠きます。けびき線の基準は通常と同じ桁角です。</p>
       </fieldset>
     </div>
   </aside>
@@ -145,6 +157,7 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     <div class="stage">
       <section class="sheet" aria-labelledby="result-title">
         <h2 id="result-title">垂木けびき線位置</h2>
+        <p id="result-condition" class="result-condition">通常｜桁角のけびき線から垂木先端まで</p>
         <div class="results" aria-live="polite" aria-atomic="true">
           <div class="result">
             <h3 class="title">タツ</h3>
@@ -173,7 +186,8 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 
 <script>
 const get = id => document.getElementById(id);
-const savedFields = ["keta","kobai","noki","taruki"];
+const numberFields = ["keta","kobai","noki","taruki"];
+const savedFields = [...numberFields,"notchType"];
 const storageKey = "kebiki-line.input.v1";
 for (let v = 1; v <= 5; v += 0.5) {
   const o = document.createElement("option");
@@ -184,7 +198,7 @@ for (let v = 1; v <= 5; v += 0.5) {
 function calc() {
   const values = {};
   let complete = true;
-  for (const id of savedFields) {
+  for (const id of numberFields) {
     const field = get(id), raw = field.value.trim(), value = field.valueAsNumber;
     const invalid = field.validity.badInput || (raw !== '' && (!Number.isFinite(value) || !field.validity.valid));
     const error = get(id + '-error');
@@ -196,11 +210,23 @@ function calc() {
     if (invalid || raw === '') complete = false;
     values[id] = value;
   }
+  const notchType = get('notchType').value;
+  const validType = ['center','techno'].includes(notchType);
+  get('notchType-error').hidden = validType;
+  get('notchType-error').textContent = validType ? '' : '垂木欠きの種類を選んでください。';
+  get('notchType').setAttribute('aria-invalid', String(!validType));
+  get('notchType').setAttribute('aria-describedby', notchType==='techno' ? 'notchType-error techno-hint' : 'notchType-error');
+  get('techno-hint').hidden = notchType!=='techno';
+  get('result-condition').textContent = (validType ? (notchType==='techno' ? 'テクノ' : '通常')+'｜' : '')+'桁角のけびき線から垂木先端まで';
   get('kane').textContent = get('tatsu').textContent = '—';
-  if (!complete) return;
+  if (!complete || !validType) return;
   const keta = values.keta, C = values.kobai / 10, D = values.noki, T = values.taruki;
   const horiz = D - keta / 2;
-  const base = Math.sqrt(horiz ** 2 + (horiz * C) ** 2);
+  const normalBase = Math.sqrt(horiz ** 2 + (horiz * C) ** 2);
+  // 桁角のけびき線を基準に保ち、鉛直10 mmを垂木方向へ投影する。
+  // 軒先が桁角より内側の入力でも、先に向きを保ってから距離に直す。
+  const cornerShift = notchType==='techno' ? 10 * (C / Math.hypot(1,C)) : 0;
+  const base = notchType==='techno' ? Math.abs(Math.sign(horiz)*normalBase+cornerShift) : normalBase;
   const perpendicular = base - T * C;
   if (!Number.isFinite(base) || !Number.isFinite(perpendicular)) {
     get('kobai-error').textContent = '数値が大きすぎるため計算できません。';
@@ -211,7 +237,7 @@ function calc() {
   get('kane').textContent = base.toFixed(1);
   get('tatsu').textContent = perpendicular.toFixed(1);
 }
-// 計算式とタツ・カネの表示先は原版のまま、入力だけを専用キーへ保存する。
+// 入力と欠きの種類を専用キーへ保存し、他の計算画面とは分ける。
 function saveInputs() {
   try {
     const values = Object.fromEntries(savedFields.map(id => [id, get(id).value]));
@@ -221,9 +247,13 @@ function saveInputs() {
 try {
   const saved = JSON.parse(localStorage.getItem(storageKey) || "null");
   if (saved && typeof saved === "object") {
-    for (const id of savedFields) {
+    for (const id of numberFields) {
       if (typeof saved[id] !== "string" || saved[id].length > 64) continue;
       get(id).value = saved[id];
+    }
+    // 種類追加前の途中入力は通常として引き継ぎ、不正な種類では計算しない。
+    if (Object.prototype.hasOwnProperty.call(saved,'notchType')) {
+      get('notchType').value=['center','techno'].includes(saved.notchType)?saved.notchType:'';
     }
   }
 } catch { /* 保存の不具合で計算を止めない。 */ }
@@ -237,12 +267,13 @@ savedFields.forEach(id => {
   calc(); saveInputs(); get(id).focus();
 }));
 function resetInputs() {
-  savedFields.forEach(id => { get(id).value = ''; });
+  numberFields.forEach(id => { get(id).value = ''; });
+  get('notchType').value='center';
   ['keta','taruki','kobai'].forEach(id => { get(id + '-choice').value = ''; });
   calc(); saveInputs();
 }
 get('btnReset').onclick = () => {
-  if (savedFields.some(id => get(id).value !== '' || get(id).validity.badInput)) get('resetDialog').showModal();
+  if (numberFields.some(id => get(id).value !== '' || get(id).validity.badInput) || get('notchType').value!=='center') get('resetDialog').showModal();
   else resetInputs();
 };
 get('resetCancel').onclick = () => get('resetDialog').close();
