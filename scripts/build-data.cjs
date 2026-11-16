@@ -43,6 +43,10 @@ assert.deepEqual(data.selectionRules, {
   minimumProjection: 10,
   maximumProtrusion: 10,
 });
+const flat = data.parts.find(part => part.id === "flat");
+assert.equal(flat.axial, "4.5");
+assert.equal(flat.outer, "39");
+assert.equal(flat.outer, data.parts.find(part => part.id === "spring").outer);
 const generated =
   "/* defaults.json から生成。変更は元の JSON に行う。 */\nwindow.BOLT_DEFAULTS = " +
   JSON.stringify(data, null, 2) +

@@ -510,6 +510,15 @@
     if (m && typeof m === "object" && !Array.isArray(m))
       for (const key of ["member1Height", "member2Height"])
         if (!(key in m) && m.mode !== "outside") m[key] = "";
+    const flat = data.parts.find(part => part.id === "flat");
+    for (const side of ["left", "right"]) {
+      const p = m?.washers?.[side];
+      if (p?.partId !== "flat") continue;
+      // 旧版の未設定外形だけを確定値へ補う。指定済みの寸法は別の座金として残す。
+      if (p.outer === "") p.outer = flat.outer;
+      else if (String(p.outer) !== flat.outer && String(p.axial) === flat.axial)
+        p.partId = "custom";
+    }
     validateShape(m, data, true);
     return m;
   }
