@@ -6,7 +6,8 @@ window.BOLT_DEFAULTS = {
     "recess": 28,
     "box": 58,
     "nut": 10,
-    "boltDiameter": 12
+    "boltDiameter": 12,
+    "holeDiameter": 16
   },
   "selectionRules": {
     "minimumProjection": 10,

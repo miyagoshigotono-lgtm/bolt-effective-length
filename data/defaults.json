@@ -1,7 +1,7 @@
 {
   "version": 6,
   "specVersion": "2026-10-22-full-nut",
-  "dimensions": { "recess": 28, "box": 58, "nut": 10, "boltDiameter": 12 },
+  "dimensions": { "recess": 28, "box": 58, "nut": 10, "boltDiameter": 12, "holeDiameter": 16 },
   "selectionRules": { "minimumProjection": 10, "maximumProtrusion": 10 },
   "catalogs": {
     "single": {
