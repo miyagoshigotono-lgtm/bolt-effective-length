@@ -8,12 +8,12 @@
       content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src 'self' file: data: blob:; connect-src 'none'; object-src 'none'; base-uri 'none'"
     />
     <title>ボルト有効長</title>
-    <link rel="stylesheet" href="styles.css?v=20261102-5" />
+    <link rel="stylesheet" href="styles.css?v=20261116-1" />
     <script src="vendor/lucide.min.js" defer></script>
     <script src="js/defaults.js" defer></script>
-    <script src="js/calculator.js" defer></script>
-    <script src="js/drawing.js?v=20261031-4" defer></script>
-    <script src="js/app.js?v=20261031-4" defer></script>
+    <script src="js/calculator.js?v=20261116-1" defer></script>
+    <script src="js/drawing.js?v=20261116-1" defer></script>
+    <script src="js/app.js?v=20261116-1" defer></script>
   </head>
   <body>
     <main class="workspace">
@@ -97,7 +97,7 @@
             ></label
           >
         </fieldset>
-        <fieldset class="segment">
+        <fieldset class="segment" id="standard-input-method">
           <legend>入力</legend>
           <label
             ><input type="radio" name="mode" value="joint" /><span
@@ -110,11 +110,19 @@
             ></label
           >
         </fieldset>
+        <fieldset id="outside-fields" hidden>
+          <legend>外ツラ～外ツラ</legend>
+          <div class="outside-sizes">
+            <label class="field">部材1の成<span class="unit">mm</span><input id="member1Height" type="text" inputmode="decimal" autocomplete="off" placeholder="入力" /></label>
+            <label class="field">部材2の成<span class="unit">mm</span><input id="member2Height" type="text" inputmode="decimal" autocomplete="off" placeholder="入力" /></label>
+          </div>
+        </fieldset>
         </div>
         <section id="joint-pattern-panel" role="tabpanel" aria-labelledby="joint-tab-pattern" tabindex="0" hidden>
           <h2>木組みのパターン</h2>
           <div id="joint-pattern-list">
-            <p>パターンは、これから追加します。</p>
+            <button type="button" data-pattern="standard" aria-pressed="true"><strong>通常</strong><span>柱と梁・穴の位置／有効長から入力</span></button>
+            <button type="button" data-pattern="outside" aria-pressed="false"><strong>外ツラ～外ツラ</strong><span>2部材を接して配置・両側座彫り28 mm</span></button>
           </div>
         </section>
       </aside>
