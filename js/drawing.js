@@ -59,6 +59,7 @@
         : r.input,
       g = { ...r.geometry },
       d = data.dimensions;
+    const outside = m.mode === "outside";
     let leftPositionPending = false;
     if (options.preview) {
       const recessWidth = /^\d+(?:\.\d)?$/.test(String(current.recessWidth))
@@ -88,7 +89,8 @@
       : options.compact
         ? "woodHatch-screen"
         : "woodHatch-export";
-    const chart = [],
+    const heading = [],
+      chart = [],
       detail = [];
     const min = Math.min(
       g.start - (m.leftSeat === "box" ? 78 : 28),
@@ -96,14 +98,17 @@
       g.column == null ? Infinity : 0,
     );
     const max = Math.max(g.end + (m.rightSeat === "box" ? 78 : 28), g.boltEnd);
+    // 外形未設定の座金は、ボルトの下へ隠れない破線の目印にする。
+    // この仮外形は作図だけに使い、実寸・計算結果・保存値へは戻さない。
+    const washerOuter = (part) => part.outer ?? d.boltDiameter * 2;
     const scale = Math.min(
       760 / (max - min),
       170 /
         Math.max(
-          g.width,
+          outside ? g.recessWidth : g.width,
           g.column ?? 0,
-          r.washers.left.outer ?? 12,
-          r.washers.right.outer ?? 12,
+          washerOuter(r.washers.left),
+          washerOuter(r.washers.right),
           21.9,
         ),
     );
@@ -166,8 +171,9 @@
       );
     }
     function rect(x, y, w, h, fill, row = "", stroke = "#516e62", dash = "") {
-      const edit = row.endsWith("-seat")
-        ? row.split("-")[0] + "Seat"
+      const seat = row.endsWith("-seat");
+      const edit = seat
+        ? (outside ? "" : row.split("-")[0] + "Seat")
         : row.startsWith("washer-")
           ? row
           : "";
@@ -176,7 +182,7 @@
           `<g class="diagram-target" role="button" tabindex="0" data-edit="${edit}" aria-label="${edit.endsWith("Seat") ? (edit.startsWith("left") ? "左" : "右") + "の穴" : (edit.endsWith("left") ? "左" : "右") + "の座金"}を変更"><title>種類を変更</title>`,
         );
       chart.push(
-        `<rect x="${num(X(x))}" y="${num(axis + y * scale)}" width="${num(w * scale)}" height="${num(h * scale)}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${row ? ' data-row="' + row + '"' : ""}${edit.endsWith("Seat") ? ` data-seat="${m[edit]}" data-position-known="${row !== "left-seat" || !leftPositionPending}"` : ""}${dash ? ' stroke-dasharray="' + dash + '"' : ""}/>`,
+        `<rect x="${num(X(x))}" y="${num(axis + y * scale)}" width="${num(w * scale)}" height="${num(h * scale)}" fill="${fill}" stroke="${stroke}" stroke-width="1.5"${row ? ' data-row="' + row + '"' : ""}${seat ? ` data-seat="${m[row.split("-")[0]+"Seat"]}" data-position-known="${row !== "left-seat" || !leftPositionPending}"` : ""}${dash ? ' stroke-dasharray="' + dash + '"' : ""}/>`,
       );
       if (options.interactive && edit) chart.push("</g>");
     }
@@ -201,7 +207,24 @@
     const woodStart = m.leftSeat === "box" ? g.start - 78 : g.start - 28;
     // 箱穴の先は材が続くため、短い省略区間と破断線を置く。材の全長ではない。
     const woodEnd = g.end + (m.rightSeat === "box" ? 78 : 28);
-    if (g.column != null) {
+    if (outside) {
+      // 成と金物は同じ縮尺。未入力の部材長さ方向は破断線で省略する。
+      const shownLength = 240 / scale;
+      rect(0, -shownLength/2, g.member1Height, shownLength, "url(#"+id+")", "member-1");
+      rect(g.member1Height, -shownLength/2, g.member2Height, shownLength, "url(#"+id+")", "member-2");
+      for (const y of [axis-120,axis+120]) {
+        line(X(0),y,X(g.outsideLength),y,"white");
+        for (const [a,b] of [[0,g.member1Height],[g.member1Height,g.outsideLength]]) {
+          const x1=X(a),x2=X(b),mid=(x1+x2)/2;
+          chart.push(`<path data-member-break="true" d="M ${num(x1)} ${y} L ${num(mid-6)} ${y} l 4 -5 l 4 10 l 4 -5 L ${num(x2)} ${y}" fill="none" stroke="#516e62" stroke-width="1.5"/>`);
+        }
+      }
+      const memberLabel = (key, value) => options.geometryPending && (!/^\d+(?:\.\d)?$/.test(String(current[key])) || Number(current[key])<=28 || Number(current[key])>10000)
+        ? (current[key] ? "未確定" : "未入力") : fmt(value);
+      dim(0,g.member1Height,95,"部材1 成 "+memberLabel("member1Height",g.member1Height),"#476b5e","member1Height");
+      dim(g.member1Height,g.outsideLength,420,"部材2 成 "+memberLabel("member2Height",g.member2Height),"#476b5e","member2Height");
+      dim(0,g.outsideLength,460,"外ツラ～外ツラ "+(options.geometryPending?"未確定":fmt(g.outsideLength)));
+    } else if (g.column != null) {
       const leftWidth = m.leftSeat === "recess" ? g.column : g.width;
       rect(0, -leftWidth / 2, g.column, leftWidth, "url(#" + id + ")", "wood");
       rect(
@@ -250,6 +273,7 @@
       );
     // 座彫り側は柱の側面・梁の平面として、木部の輪郭を上下へ延ばす。
     for (const side of ["left", "right"]) {
+      if (outside) continue;
       if (m[side + "Seat"] !== "recess") continue;
       const left =
           side === "left"
@@ -309,7 +333,7 @@
       );
       if (options.preview) continue;
       const p = r.washers[side],
-        outer = p.outer ?? 12;
+        outer = washerOuter(p);
       const wx = side === "left" ? face - p.axial : face;
       const stepped = p.partId === "spring" || p.partId === "tight";
       const baseX = stepped && side === "left" ? face - 4.5 : wx;
@@ -389,7 +413,7 @@
     dim(
       g.start,
       g.end,
-      105,
+      outside ? 65 : 105,
       "有効長 E " +
         (options.geometryPending || leftPositionPending
           ? "未確定"
@@ -401,22 +425,22 @@
       dim(
         g.boltStart,
         g.boltEnd,
-        70,
+        outside ? 30 : 70,
         (r.selected == null ? "必要長 " : "ボルト L ") +
           fmt(r.selected ?? r.required),
         "#b23a46",
       );
     text(
-      chart,
-      500,
+      outside ? heading : chart,
+      outside ? width/2 : 500,
       24,
-      "平面・ボルト軸の断面 / 単位 mm",
-      850,
+      outside ? (vertical?"梁の側面・タテボルト":"柱どうし・ヨコボルト")+" / 単位 mm" : "平面・ボルト軸の断面 / 単位 mm",
+      outside ? width-40 : 850,
       16,
       "#334b45",
       "middle",
     );
-    if (!options.interactive)
+    if (!options.interactive && !outside)
       text(
         chart,
         110,
@@ -429,9 +453,16 @@
         800,
         15,
       );
-    const startY = vertical ? 1020 : 505;
+    if (outside) text(heading,width/2,56,"外ツラ～外ツラ / 部材長さ方向は省略",width-40,13,"#5b6878","middle");
+    const startY = vertical ? 1020 : outside ? 565 : 505;
     let heights = [];
-    const cols = options.workspace ? [] : options.interactive
+    const cols = options.workspace ? [] : outside
+      ? [
+          {title:"部材1",lines:["成 "+fmt(g.member1Height),"座彫り28固定",r.washers.left.name+" "+fmt(r.washers.left.axial),m.boltType==="double"?"ナット10":"ナット一体の頭",...(!options.preview && m.boltType==="double"?endLines("left"):[])]},
+          {title:"外ツラ～外ツラ",lines:["全体 "+fmt(g.outsideLength),"有効長 "+fmt(r.effective),r.effectiveEquation]},
+          {title:"部材2",lines:["成 "+fmt(g.member2Height),"座彫り28固定",r.washers.right.name+" "+fmt(r.washers.right.axial),"ナット10",...(!options.preview?endLines("right"):[])]},
+        ]
+      : options.interactive
       ? [
           {
             title: "左",
@@ -541,10 +572,10 @@
             : text(detail, x, y, value, cw, 15);
       heights.push(y);
     });
-    let bottom = options.workspace ? (vertical ? 1010 : 485) : Math.max(...heights) + 12;
+    let bottom = options.workspace ? (vertical ? 1010 : outside ? 545 : 485) : Math.max(...heights) + 12;
     if (options.print && !vertical) {
       detail.length = 0;
-      let y = 505;
+      let y = outside ? 565 : 505;
       for (const value of [
         "左：" +
           r.washers.left.name +
@@ -559,7 +590,7 @@
           fmt(r.washers.right.axial) +
           " / ナット10 / " +
           endSummary("right"),
-        "ボルト深さ " +
+        outside ? "部材1 成 "+fmt(g.member1Height)+" / 部材2 成 "+fmt(g.member2Height) : "ボルト深さ " +
           fmt(g.boltDepth) +
           "（外ツラ〜芯） / 材料の高さ " +
           fmt(g.height),
@@ -567,7 +598,7 @@
         y += text(detail, 110, y, value, 800, 16);
       bottom = y + 5;
     }
-    if (!options.print && !options.interactive) {
+    if (!options.print && !options.interactive && !outside) {
       const x = 40,
         y = bottom + 40,
         s = Math.min(1.1, 140 / g.height, 110 / g.width),
@@ -609,14 +640,14 @@
     }
     const transform = vertical
       ? ' transform="translate(600, 10) rotate(90)"'
-      : "";
+      : outside ? ' transform="translate(0, 60)"' : "";
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${num(bottom + 20)}" role="${options.interactive ? "group" : "img"}" aria-label="穴と木部とボルトの寸法図"
-      data-effective="${options.preview ? "" : r.effective}" data-selected="${options.preview ? "" : (r.selected ?? "")}" data-required="${options.preview ? "" : r.required}" data-bolt-depth="${g.boltDepth}"${options.preview ? ' data-preview="true"' : ""}>
+      data-effective="${options.preview ? "" : r.effective}" data-selected="${options.preview ? "" : (r.selected ?? "")}" data-required="${options.preview ? "" : r.required}"${outside ? '' : ` data-bolt-depth="${g.boltDepth}"`}${options.preview ? ' data-preview="true"' : ""}>
       <title>${options.preview ? "未計算の入力図" : esc(m.name) + " / E " + fmt(r.effective) + " / L " + (r.selected ?? "該当なし")}</title>
       <metadata>${esc(JSON.stringify(options.preview ? { specVersion: data.specVersion, model: current, state: "preview" } : { specVersion: data.specVersion, model: m, result: r }))}</metadata>
       <defs><pattern id="${id}" width="9" height="9" patternUnits="userSpaceOnUse"><rect width="9" height="9" fill="#f1f7f3"/><path d="M-2 9 L9-2 M7 11 L11 7" stroke="#ccd9ca" stroke-width="0.8"/></pattern></defs>
       <rect width="100%" height="100%" fill="white"/>
-      <g font-family="Meiryo, Yu Gothic UI, sans-serif"><g${transform}>${chart.join("")}</g>${detail.join("")}</g>
+      <g font-family="Meiryo, Yu Gothic UI, sans-serif"><g${transform}>${chart.join("")}</g>${heading.join("")}${detail.join("")}</g>
     </svg>`;
   }
   return { render, escape: esc };

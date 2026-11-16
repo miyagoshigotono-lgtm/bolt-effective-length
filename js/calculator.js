@@ -43,6 +43,8 @@
       name: "ボルト接合",
       boltType: "",
       mode: "joint",
+      member1Height: "",
+      member2Height: "",
       direction: "horizontal",
       effective: "277",
       candidate: "auto",
@@ -90,12 +92,19 @@
     }
     for (const [k, values] of [
       ["boltType", ["", "single", "double"]],
-      ["mode", ["joint", "direct"]],
+      ["mode", ["joint", "direct", "outside"]],
       ["direction", ["horizontal", "vertical"]],
       ["leftSeat", ["box", "recess"]],
       ["rightSeat", ["box", "recess"]],
     ])
       if (!values.includes(m[k])) fail(k, "選択内容が不正です。");
+    if (m.mode === "outside" && (m.leftSeat !== "recess" || m.rightSeat !== "recess"))
+      fail("mode", "外ツラ～外ツラは両側を座彫りにしてください。");
+    for (const key of ["member1Height", "member2Height"]) {
+      if (m.mode !== "outside" && !(key in m)) continue;
+      if (!["string", "number"].includes(typeof m[key]) || String(m[key]).length > 50)
+        fail(key, "部材の成の形式が不正です。");
+    }
     for (const k of [
       "effective",
       "column",
@@ -151,25 +160,40 @@
       const row = (group, label, n) =>
         breakdown.push({ group, label, value: n / 10 });
       const column = m.mode === "joint" ? units(m.column, "column") : null;
-      const width = units(m.beamWidth, "beamWidth"),
-        height = units(m.beamHeight, "beamHeight");
+      const outside = m.mode === "outside";
+      const width = outside ? null : units(m.beamWidth, "beamWidth"),
+        height = outside ? null : units(m.beamHeight, "beamHeight");
       const recessWidth =
         m.leftSeat === "recess" || m.rightSeat === "recess"
           ? units(m.recessWidth, "recessWidth")
           : null;
       const hasBox = m.leftSeat === "box" || m.rightSeat === "box";
-      const boltDepth = units(m.boltDepth, "boltDepth");
+      const boltDepth = outside ? null : units(m.boltDepth, "boltDepth");
       if (hasBox && width < d.box * 10)
         fail("beamWidth", "桁の幅はボックス穴58 mm以上にしてください。");
-      if (recessWidth != null && recessWidth > width)
+      if (!outside && recessWidth != null && recessWidth > width)
         fail("recessWidth", "座彫りの幅が桁の幅を超えています。");
-      if (boltDepth >= height)
+      if (!outside && boltDepth >= height)
         fail("boltDepth", "ボルト深さは材料の高さより小さくしてください。");
       let start,
         end,
         effective,
+        member1 = null,
+        member2 = null,
         clearance = null;
-      if (m.mode === "direct") {
+      if (m.mode === "outside") {
+        member1 = units(m.member1Height, "member1Height");
+        member2 = units(m.member2Height, "member2Height");
+        for (const [key, value] of [["member1Height", member1], ["member2Height", member2]])
+          if (value <= d.recess * 10)
+            fail(key, "部材の成は座彫り28 mmより大きくしてください。");
+        start = d.recess * 10;
+        end = member1 + member2 - d.recess * 10;
+        effective = end - start;
+        row("effective", "部材1の成", member1);
+        row("effective", "部材2の成", member2);
+        row("effective", "両側の座彫り", -2 * d.recess * 10);
+      } else if (m.mode === "direct") {
         effective = units(m.effective, "effective");
         start = 0;
         end = effective;
@@ -378,11 +402,14 @@
           start: e0,
           end: e1,
           column: column == null ? null : column / 10,
+          member1Height: member1 == null ? null : member1 / 10,
+          member2Height: member2 == null ? null : member2 / 10,
+          outsideLength: member1 == null ? null : (member1 + member2) / 10,
           clearance: clearance == null ? null : clearance / 10,
-          width: width / 10,
-          height: height / 10,
+          width: width == null ? null : width / 10,
+          height: height == null ? null : height / 10,
           recessWidth: recessWidth == null ? null : recessWidth / 10,
-          boltDepth: boltDepth / 10,
+          boltDepth: boltDepth == null ? null : boltDepth / 10,
           boltStart,
           boltEnd,
           leftOuter,
@@ -391,7 +418,9 @@
           rightWasherFace,
         },
         effectiveEquation:
-          m.mode === "direct"
+          m.mode === "outside"
+            ? "E = " + format(member1 / 10) + " + " + format(member2 / 10) + " − 28 − 28 = " + format(effective / 10)
+            : m.mode === "direct"
             ? "E = " + format(effective / 10)
             : "E = " +
               format(column / 10) +
@@ -477,6 +506,10 @@
       }
       m.specVersion = data.specVersion;
     }
+    // 追加前の保存データには、未使用の部材寸法を空欄として補う。
+    if (m && typeof m === "object" && !Array.isArray(m))
+      for (const key of ["member1Height", "member2Height"])
+        if (!(key in m) && m.mode !== "outside") m[key] = "";
     validateShape(m, data, true);
     return m;
   }

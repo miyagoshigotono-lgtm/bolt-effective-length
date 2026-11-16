@@ -208,6 +208,17 @@
     }
     applyZoom();
   }
+  $("joint-pattern-list").addEventListener("click", event => {
+    const pattern = event.target.closest("[data-pattern]")?.dataset.pattern;
+    if (!pattern) return;
+    if (pattern === "outside") {
+      if (model.mode !== "outside") model.direction = "vertical";
+      model.mode = "outside";
+      model.leftSeat = model.rightSeat = "recess";
+    } else if (model.mode === "outside") model.mode = "joint";
+    renderForm();
+    selectJointTab($("joint-tab-input"));
+  });
   for (const tab of jointTabs) {
     tab.addEventListener("click", () => selectJointTab(tab));
     tab.addEventListener("keydown", event => {
@@ -239,7 +250,9 @@
           ? 0
           : ["leftProjection", "rightProjection"].includes(key)
             ? data.selectionRules.minimumProjection * 10
-            : 1;
+            : ["member1Height", "member2Height"].includes(key)
+              ? data.dimensions.recess * 10 + 1
+              : 1;
       return next >= minimum && next <= 100000 ? calc.format(next / 10) : null;
     } catch (error) {
       return null;
@@ -337,7 +350,8 @@
       (["column", "clearance", "leftBoxPosition"].includes(editorKey) &&
         model.mode !== "joint") ||
       (editorKey === "leftBoxPosition" && model.leftSeat !== "box") ||
-      (editorKey === "leftProjection" && model.boltType !== "double")
+      (editorKey === "leftProjection" && model.boltType !== "double") ||
+      (["member1Height","member2Height"].includes(editorKey) && model.mode !== "outside")
     )
       closeEditor(false);
     for (const id of [
@@ -356,6 +370,8 @@
       "rightSeat",
       "leftProjection",
       "rightProjection",
+      "member1Height",
+      "member2Height",
     ])
       setValue(id, model[id]);
     for (const name of ["boltType", "mode"])
@@ -367,6 +383,11 @@
     jointMode.parentElement.title = jointMode.disabled ? "左がボックス穴のときは、有効長を直接入力します。" : "";
     $("direct-fields").hidden = model.mode !== "direct";
     $("joint-fields").hidden = model.mode !== "joint";
+    $("standard-input-method").hidden = model.mode === "outside";
+    $("outside-fields").hidden = model.mode !== "outside";
+    document.body.classList.toggle("outside-pattern", model.mode === "outside");
+    for (const button of $("joint-pattern-list").querySelectorAll("[data-pattern]"))
+      button.setAttribute("aria-pressed", String((button.dataset.pattern === "outside") === (model.mode === "outside")));
     $("clearance-title").textContent =
       model.rightSeat === "box"
         ? "柱の右面から右の穴の内側まで"
@@ -449,6 +470,22 @@
       const reference = calc.calculate({ ...clone(lastDiagram.input), mode: "direct", effective: calc.format(lastDiagram.effective) }, data);
       if (reference.ok) lastDiagram = reference;
     }
+    if (!draft.ok && model.mode !== "outside" && lastDiagram.input.mode === "outside") {
+      // 通常へ戻ったときは、外ツラ用の参考図を引き継がない。
+      const reference = calc.calculate({ ...calc.createModel(data), mode:model.mode, boltType:model.boltType||"double" }, data);
+      if (reference.ok) lastDiagram = reference;
+    }
+    if (!draft.ok && model.mode === "outside") {
+      // 未入力の成は参考図だけの寸法に置き換え、入力・結果には使わない。
+      const dimensions = {};
+      for (const key of ["member1Height", "member2Height"]) {
+        try { dimensions[key] = calc.units(model[key], key) > data.dimensions.recess * 10 ? model[key] : "105"; }
+        catch { dimensions[key] = "105"; }
+      }
+      const reference = calc.calculate({ ...clone(lastDiagram.input), ...dimensions,
+        mode:"outside", leftSeat:"recess", rightSeat:"recess" }, data);
+      if (reference.ok) lastDiagram = reference;
+    }
     const chart = drawing.render(lastDiagram, data, {
       compact: true,
       interactive: true,
@@ -460,10 +497,14 @@
     const control = (key,label) => `<button type="button" data-edit="${key}" aria-label="${esc(label)}を変更">${esc(label)}</button>`;
     const partName = side => data.parts.find(part=>part.id===model.washers[side].partId).name;
     const seatName = side => model[side+"Seat"]==="box" ? "ボックス穴 58角" : "座彫り 28";
+    const seatControl = side => model.mode === "outside" ? '<span class="fixed-dimensions">座彫り28固定</span>' : control(side+"Seat",seatName(side));
+    const memberControls = model.mode === "outside"
+      ? control("member1Height","部材1 成 "+(model.member1Height||"未入力"))+control("member2Height","部材2 成 "+(model.member2Height||"未入力"))
+      : control("beamWidth","幅 "+(model.beamWidth||"未入力"))+control("beamHeight","高さ "+(model.beamHeight||"未入力"))+control("boltDepth","ボルト深さ "+(model.boltDepth||"未入力"));
     $("drawing").innerHTML = `<div id="drawing-canvas">${chart}</div><div class="drawing-controls">
-      <div><strong>左</strong>${control("leftSeat",seatName("left"))}${control("washer-left",partName("left"))}${model.boltType==="double"?control("leftProjection","最低かかり "+(model.leftProjection||"未入力")):""}</div>
-      <div><strong>木部</strong>${control("beamWidth","幅 "+(model.beamWidth||"未入力"))}${control("beamHeight","高さ "+(model.beamHeight||"未入力"))}${control("boltDepth","ボルト深さ "+(model.boltDepth||"未入力"))}${model.leftSeat==="recess"||model.rightSeat==="recess"?control("recessWidth","座彫り幅 "+(model.recessWidth||"未入力")):""}</div>
-      <div><strong>右</strong>${control("rightSeat",seatName("right"))}${control("washer-right",partName("right"))}${control("rightProjection","最低かかり "+(model.rightProjection||"未入力"))}</div>
+      <div><strong>${model.mode==="outside" && model.direction==="vertical"?"上":"左"}</strong>${seatControl("left")}${control("washer-left",partName("left"))}${model.boltType==="double"?control("leftProjection","最低かかり "+(model.leftProjection||"未入力")):""}</div>
+      <div><strong>木部</strong>${memberControls}${model.leftSeat==="recess"||model.rightSeat==="recess"?control("recessWidth","座彫り幅 "+(model.recessWidth||"未入力")):""}</div>
+      <div><strong>${model.mode==="outside" && model.direction==="vertical"?"下":"右"}</strong>${seatControl("right")}${control("washer-right",partName("right"))}${control("rightProjection","最低かかり "+(model.rightProjection||"未入力"))}</div>
     </div>`;
     // 図形と寸法の実際の範囲へ余白を合わせ、縦図でも空白のために縮小しない。
     const screenSvg = $("drawing").querySelector("svg");
@@ -481,8 +522,9 @@
       : !model.boltType
         ? "ボルト未選択"
         : "入力中の参考図・未計算";
-    $("dimension-summary").textContent =
-      `桁 ${model.beamWidth || "未入力"} × ${model.beamHeight || "未入力"} / ボルト深さ ${model.boltDepth || "未入力"} / 最低かかり量 ${model.boltType === "double" ? "左" + (model.leftProjection || "未入力") + "・" : ""}右${model.rightProjection || "未入力"} mm`;
+    $("dimension-summary").textContent = model.mode === "outside"
+      ? `外ツラ～外ツラ / 部材1 成 ${model.member1Height||"未入力"} / 部材2 成 ${model.member2Height||"未入力"} / 両側座彫り28 mm`
+      : `桁 ${model.beamWidth || "未入力"} × ${model.beamHeight || "未入力"} / ボルト深さ ${model.boltDepth || "未入力"} / 最低かかり量 ${model.boltType === "double" ? "左" + (model.leftProjection || "未入力") + "・" : ""}右${model.rightProjection || "未入力"} mm`;
     $("file-summary").textContent = model.name;
     if (editorKey) {
       const field = editorKey;
@@ -587,6 +629,7 @@
     editor.dataset.placement = placement;
   }
   function openEditor(key, target = null) {
+    if (model.mode === "outside" && ["leftSeat","rightSeat"].includes(key)) return;
     const titles = {
       column: model.leftSeat === "box" ? "梁側の基準幅" : "柱の幅",
       clearance:
@@ -604,6 +647,8 @@
       recessWidth: "座彫りの幅",
       leftProjection: "左の最低かかり量",
       rightProjection: "右の最低かかり量",
+      member1Height: "部材1の成",
+      member2Height: "部材2の成",
     };
     if (!titles[key]) return;
     editorKey = key;
@@ -853,6 +898,12 @@
       "ナットからの飛び出し：" + $("result-protruding").textContent,
       "カタログ：" + result.catalog.source + " / 版 " + result.catalog.version,
     ];
+    if (model.mode === "outside") {
+      lines[1] = `パターン：外ツラ～外ツラ / ${model.direction === "vertical" ? "タテボルト" : "ヨコボルト"}`;
+      lines[2] = `部材1の成 ${model.member1Height} / 部材2の成 ${model.member2Height} mm`;
+      lines[4] = "両側座彫り28 mm固定 / ナット厚さ10 mm";
+      lines[5] = `外ツラ～外ツラ ${calc.format(result.geometry.outsideLength)} mm`;
+    }
     if (model.mode === "joint") {
       lines.push(
         `柱の幅：${model.column} mm / 柱からの距離：${model.clearance} mm`,
@@ -1109,6 +1160,8 @@
     "recessWidth",
     "leftProjection",
     "rightProjection",
+    "member1Height",
+    "member2Height",
   ])
     $(id).addEventListener("input", (event) => {
       model[id] = event.target.value;

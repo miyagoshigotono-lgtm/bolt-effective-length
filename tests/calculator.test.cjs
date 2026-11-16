@@ -40,6 +40,46 @@ test("柱105 − 座彫り28 + 逃げ200 = 有効長277", () => {
     306,
   );
 });
+
+test("外ツラは2部材の成の合計から両側の座彫り28を引き、縦横で長さを変えない", () => {
+  for(const type of ['single','double'])for(const direction of ['horizontal','vertical']){
+    const m=Object.assign(model(type),{mode:'outside',direction,leftSeat:'recess',rightSeat:'recess',member1Height:'180',member2Height:'210',column:'',clearance:'',effective:'',beamWidth:'',beamHeight:'',boltDepth:''});
+    const r=run(m);
+    assert.equal(r.geometry.outsideLength,390);assert.equal(r.effective,334);
+    assert.equal(r.geometry.width,null);assert.equal(r.geometry.height,null);assert.equal(r.geometry.boltDepth,null);
+    assert.equal(r.geometry.start,28);assert.equal(r.geometry.end,362);
+    assert.equal(r.geometry.member1Height,180);assert.equal(r.geometry.member2Height,210);
+    assert.equal(r.geometry.column,null);assert.equal(r.geometry.clearance,null);
+    assert.equal(r.required,type==='single'?353:363);assert.equal(r.selected,type==='single'?360:375);
+    assert.equal(r.breakdown.reduce((sum,row)=>sum+row.value,0),r.required);
+    assert.equal(r.effectiveEquation,'E = 180 + 210 − 28 − 28 = 334');
+  }
+});
+
+test("外ツラの0.1 mmと部材ごとの座彫り境界を検証し、ボックス穴は受け付けない",()=>{
+  const m=Object.assign(model('single'),{mode:'outside',leftSeat:'recess',rightSeat:'recess',member1Height:'105.5',member2Height:'120.2'});
+  assert.equal(run(m).effective,169.7);assert.equal(run(m).geometry.outsideLength,225.7);
+  for(const key of ['member1Height','member2Height']){
+    const old=m[key];
+    for(const invalid of ['', '0','28','27.9','28.01','10000.1']){
+      m[key]=invalid;const r=calc.calculate(m,data);assert.equal(r.ok,false);assert.equal(r.errors[0].field,key);
+    }
+    m[key]=old;
+  }
+  m.member1Height=m.member2Height='28.1';assert.equal(run(m).effective,0.2);
+  m.member1Height=m.member2Height='10000';assert.equal(run(m).effective,19944);
+  for(const side of ['leftSeat','rightSeat']){m[side]='box';assert.equal(calc.calculate(m,data).ok,false);m[side]='recess';}
+});
+
+test("外ツラのJSONは部材の成を保存して再計算し、従来の形式6も空欄を補って読み込める",()=>{
+  const m=Object.assign(model('double'),{mode:'outside',leftSeat:'recess',rightSeat:'recess',member1Height:'180',member2Height:'210'});
+  const doc=calc.exportDocument(m,data);doc.result.effective=999;
+  const restored=calc.importDocument(doc,data);assert.deepEqual(restored,m);assert.equal(run(restored).effective,334);
+  const old=calc.exportDocument(model(),data);delete old.model.member1Height;delete old.model.member2Height;
+  const original=JSON.stringify(old),legacy=calc.importDocument(old,data);
+  assert.equal(legacy.mode,'joint');assert.equal(legacy.member1Height,'');assert.equal(legacy.member2Height,'');
+  assert.equal(run(legacy).effective,277);assert.equal(JSON.stringify(old),original);
+});
 test("片引きは座金2枚、ナット1個、座金からの出1か所", () => {
   const r = run(model("single"));
   assert.equal(r.required, 296);

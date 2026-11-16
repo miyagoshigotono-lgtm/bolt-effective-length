@@ -9,6 +9,67 @@ const drawing = require("../js/drawing.js");
 const data = require("../data/defaults.json");
 const out = path.join(__dirname, "diagram-output");
 
+test("外形未設定の平座金はボルトの下に隠れず、破線の仮表示として残る", async () => {
+  const m=Object.assign(calc.createModel(data),{boltType:'single',column:'120',clearance:'150',rightSeat:'recess'});
+  const flat=data.parts.find(part=>part.id==='flat');
+  for(const side of ['left','right'])m.washers[side]={partId:flat.id,axial:flat.axial,outer:flat.outer};
+  for(const direction of ['horizontal','vertical']){
+    m.direction=direction;
+    const r=calc.calculate(m,data),before=JSON.stringify(r);
+    assert.equal(r.ok,true);assert.equal(r.effective,214);assert.equal(r.selected,240);
+    for(const options of [{compact:true,interactive:true,workspace:true},{},{compact:true,print:true}]){
+      const svg=drawing.render(r,data,options),dom=new JSDOM(svg,{contentType:'image/svg+xml'});
+      try{
+        const doc=dom.window.document,bore=doc.querySelector('[data-row="bore-right"]');
+        for(const side of ['left','right']){
+          const plate=doc.querySelector(`[data-row="washer-${side}"]`);
+          assert.equal(r.washers[side].outer,null);
+          assert.equal(plate.getAttribute('stroke-dasharray'),'3 2');
+          assert.ok(Number(plate.getAttribute('height'))>Number(bore.getAttribute('height')),'座金の仮外形がボルト径より大きい');
+        }
+        const {data:pixels,info}=await sharp(Buffer.from(svg)).removeAlpha().raw().toBuffer({resolveWithObject:true});
+        let gold=0;
+        for(let i=0;i<pixels.length;i+=info.channels)if(pixels[i]===255 && pixels[i+1]===225 && pixels[i+2]===161)gold++;
+        assert.ok(gold>0,'描画後も座金の色がボルトの外側に見える');
+        assert.equal(JSON.stringify(r),before);
+      }finally{dom.window.close();}
+    }
+  }
+});
+
+test("外ツラの2部材・接面・座彫り28と長さは、片引き・両引き・タテ・ヨコ・全出力で一致",async()=>{
+  await fs.mkdir(out,{recursive:true});
+  for(const boltType of ['single','double'])for(const direction of ['horizontal','vertical']){
+    const m=Object.assign(calc.createModel(data),{mode:'outside',boltType,direction,leftSeat:'recess',rightSeat:'recess',member1Height:'180',member2Height:'210'});
+    const r=calc.calculate(m,data),before=JSON.stringify(r);
+    assert.equal(r.ok,true);
+    for(const options of [{compact:true,interactive:true,workspace:true},{},{compact:true,print:true}]){
+      const svg=drawing.render(r,data,options),dom=new JSDOM(svg,{contentType:'image/svg+xml'});
+      try{
+        const doc=dom.window.document,member1=doc.querySelector('[data-row="member-1"]'),member2=doc.querySelector('[data-row="member-2"]');
+        const w1=Number(member1.getAttribute('width')),w2=Number(member2.getAttribute('width')),scale=w1/180;
+        assert.ok(Math.abs(w2/210-scale)<0.0001);
+        assert.ok(Math.abs(Number(member1.getAttribute('x'))+w1-Number(member2.getAttribute('x')))<0.002);
+        assert.equal(doc.querySelectorAll('[data-member-break]').length,4);
+        assert.equal(doc.querySelector('[data-edit="leftSeat"]'),null);assert.equal(doc.querySelector('[data-edit="rightSeat"]'),null);
+        for(const side of ['left','right']){
+          const hole=doc.querySelector(`[data-row="${side}-seat"]`);
+          assert.equal(hole.dataset.seat,'recess');assert.ok(Math.abs(Number(hole.getAttribute('width'))/scale-28)<0.001);
+          assert.ok(doc.querySelector(`[data-row="washer-${side}"]`));
+        }
+        assert.ok(doc.querySelector('[data-row="bolt"]'));
+        assert.equal(doc.documentElement.dataset.effective,'334');assert.equal(doc.documentElement.hasAttribute('data-bolt-depth'),false);
+        assert.match(doc.documentElement.textContent,/外ツラ～外ツラ 390/);
+        assert.match(doc.documentElement.textContent,/部材長さ方向は省略/);
+        assert.equal(doc.querySelector('[data-row="depth"]'),null);
+        for(const text of [...doc.querySelectorAll('text')].filter(el=>/梁の側面|柱どうし/.test(el.textContent)))assert.equal(text.closest('[transform]'),null);
+        assert.ok(!/NaN|Infinity|undefined/.test(svg));assert.equal(JSON.stringify(r),before);
+        if(options.workspace && boltType==='single')await sharp(Buffer.from(svg)).png().toFile(path.join(out,`outside-${direction}.png`));
+      }finally{dom.window.close();}
+    }
+  }
+});
+
 test("32通りの入力図で編集対象と寸法が一致し、数値のタップ領域が図外へ出ない", async () => {
   await fs.mkdir(out, { recursive: true });
   for (const direction of ["horizontal", "vertical"])

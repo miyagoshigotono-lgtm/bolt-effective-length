@@ -132,8 +132,8 @@ function setup(t, workspace = null, width = 1280, visualViewport = null, blockRe
 test("最初から入力図を表示し、詳細・保存メモ・添付資料の欄を画面から外す", (t) => {
   const a = setup(t);
   assert.equal(
-    a.doc.querySelectorAll("#input-pane input[type=text], #input-pane select")
-      .length,
+    [...a.doc.querySelectorAll("#input-pane input[type=text], #input-pane select")]
+      .filter(el=>!el.closest('[hidden]')).length,
     0,
   );
   assert.equal(a.get("#dimension-details").open, false);
@@ -155,7 +155,7 @@ test("最初から入力図を表示し、詳細・保存メモ・添付資料�
   assert.equal(a.result().effective, 292);
 });
 
-test("パターンタブは種類を勝手に追加せず、入力・計算・保存を変えずに図を見ながら切り替えられる", (t) => {
+test("パターンタブの開閉だけでは入力・計算・保存を変えず、通常と外ツラの2種類を選べる", (t) => {
   const a = setup(t);
   a.type();
   const before = JSON.stringify(a.model());
@@ -166,7 +166,8 @@ test("パターンタブは種類を勝手に追加せず、入力・計算・�
   assert.equal(a.get("#joint-pattern-panel").hidden, false);
   assert.equal(a.get("#joint-tab-pattern").getAttribute("aria-selected"), "true");
   assert.equal(a.get("#diagram-editor").hidden, true);
-  assert.equal(a.get("#joint-pattern-list").querySelectorAll("button,input,select").length, 0);
+  assert.deepEqual([...a.get("#joint-pattern-list").querySelectorAll("button")].map(el=>el.dataset.pattern),["standard","outside"]);
+  assert.equal(a.get("#joint-pattern-list").querySelectorAll("input,select").length, 0);
   assert.equal(a.get("#drawing svg").dataset.effective, "277");
   assert.equal(a.get("#catalog").children.length, 18);
   assert.equal(JSON.stringify(a.model()), before);
@@ -175,6 +176,71 @@ test("パターンタブは種類を勝手に追加せず、入力・計算・�
   assert.equal(a.get("#joint-input-panel").hidden, false);
   assert.equal(a.get("#joint-pattern-panel").hidden, true);
   assert.equal(a.doc.activeElement, a.get("#joint-tab-input"));
+});
+
+test("外ツラを選ぶと成2欄を空欄で開き、座彫りを固定してタテ・ヨコで同じ有効長を出す", (t) => {
+  const a=setup(t);
+  a.type('single');
+  a.click('#joint-tab-pattern');a.click('[data-pattern="outside"]');
+  assert.equal(a.get('#joint-input-panel').hidden,false);
+  assert.equal(a.get('#outside-fields').hidden,false);
+  assert.equal(a.get('#standard-input-method').hidden,true);
+  assert.equal(a.model().member1Height,'');assert.equal(a.model().member2Height,'');
+  assert.equal(a.model().direction,'vertical');
+  assert.equal(a.get('#drawing svg').dataset.preview,'true');
+  assert.equal(a.doc.querySelector('#drawing [data-row="bolt"]'),null);
+  assert.equal(a.doc.querySelector('#drawing [data-edit="leftSeat"]'),null);
+  a.input('#member1Height','180');a.input('#member2Height','210');
+  assert.equal(a.result().effective,334);assert.equal(a.result().selected,360);
+  assert.equal(a.get('#drawing svg').dataset.effective,'334');
+  a.open('member2Height');a.input('#diagram-value','211');
+  step(a,'diagram-value',1);
+  assert.equal(a.model().member2Height,'212');assert.equal(a.get('#member2Height').value,'212');
+  assert.equal(a.result().effective,336);a.click('#close-diagram');
+  a.change('#direction','horizontal');assert.equal(a.result().effective,336);
+  a.click('#undo');assert.equal(a.model().direction,'vertical');
+  a.click('#redo');assert.equal(a.model().direction,'horizontal');
+  a.input('#member1Height','28.1');
+  assert.equal(a.get('[data-input="member1Height"][data-step="-1"]').disabled,true);
+  a.input('#member1Height','28');
+  assert.equal(a.result().ok,false);assert.equal(a.get('#member1Height').getAttribute('aria-invalid'),'true');
+  assert.equal(a.get('#drawing svg').dataset.preview,'true');
+  assert.match(a.get('#drawing svg').textContent,/部材1 成 未確定/);
+});
+
+test("外ツラの成・向き・結果を保存・読込・自動復元・印刷・SVGに引き継ぐ",async(t)=>{
+  const a=setup(t);a.type('double');
+  a.click('#joint-tab-pattern');a.click('[data-pattern="outside"]');
+  a.input('#member1Height','180');a.input('#member2Height','210');
+  const b=setup(t,JSON.parse(a.w.localStorage.getItem(workspaceKey)));
+  assert.equal(b.model().mode,'outside');assert.equal(b.result().effective,334);
+  assert.equal(b.get('#outside-fields').hidden,false);
+  assert.equal(b.get('#drawing svg').dataset.selected,'375');
+  a.save('パターン確認');
+  a.click('#export');const doc=JSON.parse(await a.downloads.at(-1).text());
+  assert.equal(doc.model.mode,'outside');assert.equal(doc.model.member2Height,'210');assert.equal(doc.result.effective,334);
+  a.click('#download-svg');const svg=await a.downloads.at(-1).text();
+  assert.ok(svg.includes('data-effective="334"'));assert.ok(!svg.includes('data-edit='));
+  assert.ok(a.get('#print-drawing').innerHTML.includes('data-selected="375"'));
+  assert.match(a.get('#print-conditions').textContent,/部材1の成 180 \/ 部材2の成 210 mm/);
+  assert.ok(!a.get('#print-conditions').textContent.includes('ボックス穴'));
+  a.click('#joint-tab-pattern');a.click('[data-pattern="standard"]');
+  assert.equal(a.model().mode,'joint');assert.equal(a.get('#outside-fields').hidden,true);
+  assert.equal(a.doc.querySelector('#drawing [data-row="member-1"]'),null);
+  a.click('#open-saved');a.click('#saved-list button[title="開く"]');
+  assert.equal(a.model().mode,'outside');assert.equal(a.model().member1Height,'180');assert.equal(a.result().selected,375);
+});
+
+test("外ツラでは使わない通常寸法の空欄を要求せず、未入力で通常へ戻った図も切り替わる",t=>{
+  const a=setup(t);a.type('single');
+  for(const key of ['column','clearance','beamWidth','beamHeight','boltDepth'])a.input('#'+key,'');
+  a.click('#joint-tab-pattern');a.click('[data-pattern="outside"]');
+  a.input('#member1Height','180');a.input('#member2Height','210');
+  assert.equal(a.result().ok,true);assert.equal(a.result().effective,334);
+  a.click('#joint-tab-pattern');a.click('[data-pattern="standard"]');
+  assert.equal(a.result().ok,false);assert.equal(a.get('#drawing svg').dataset.preview,'true');
+  assert.equal(a.doc.querySelector('#drawing [data-row="member-1"]'),null);
+  assert.match(a.get('#drawing svg').textContent,/平面・ボルト軸/);
 });
 
 test("図の柱と穴位置を直接変更すると計算・保存・寸法の詳細が一致", (t) => {
