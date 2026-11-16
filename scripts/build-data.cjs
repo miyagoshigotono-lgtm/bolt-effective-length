@@ -37,6 +37,7 @@ assert.deepEqual(data.dimensions, {
   box: 58,
   nut: 10,
   boltDiameter: 12,
+  holeDiameter: 16,
 });
 assert.deepEqual(data.selectionRules, {
   minimumProjection: 10,

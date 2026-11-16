@@ -9,6 +9,44 @@ const drawing = require("../js/drawing.js");
 const data = require("../data/defaults.json");
 const out = path.join(__dirname, "diagram-output");
 
+test("通常・外ツラの木部の通し穴は16 mm、ボルト軸は12 mmで片側2 mmのすき間を描く", () => {
+  for (const mode of ["joint", "direct", "outside"])
+    for (const [leftSeat,rightSeat] of mode==="outside" ? [["recess","recess"]] : [["box","box"],["box","recess"],["recess","box"],["recess","recess"]])
+    for (const boltType of ["single", "double"])
+      for (const direction of ["horizontal", "vertical"])
+        for (const options of [{ compact:true, interactive:true, workspace:true }, {}, { compact:true, print:true }]) {
+          const m=Object.assign(calc.createModel(data),{mode,boltType,direction,leftSeat,rightSeat,leftBoxPosition:"70",member1Height:"180",member2Height:"210"});
+          const r=calc.calculate(m,data),before=JSON.stringify(r);
+          assert.equal(r.ok,true);
+          const dom=new JSDOM(drawing.render(r,data,options),{contentType:"image/svg+xml"});
+          try {
+            const doc=dom.window.document,hole=doc.querySelector('[data-row="bolt-hole"]'),bolt=doc.querySelector('[data-row="bolt"]');
+            const plate=doc.querySelector('[data-row="washer-right"]'),scale=Number(plate.getAttribute("width"))/r.washers.right.axial;
+            // SVG座標の小数第3位への丸めを許容し、入力の0.1 mmより細かく検証する。
+            const close=(actual,expected)=>assert.ok(Math.abs(actual-expected)<0.02,`${actual} != ${expected}`);
+            close(Number(hole.getAttribute("height"))/scale,16);
+            close(Number(hole.getAttribute("width"))/scale,r.effective);
+            assert.equal(hole.getAttribute("fill"),"#ffffff");
+            let top,bottom;
+            if(boltType==="single") {
+              const points=[...bolt.querySelector('[data-row="head"]').getAttribute("d").matchAll(/[ML] (-?[\d.]+) (-?[\d.]+)/g)];
+              const tip=Math.max(...points.map(point=>Number(point[1]))),tipYs=points.filter(point=>Number(point[1])===tip).map(point=>Number(point[2]));
+              top=Math.min(...tipYs);bottom=Math.max(...tipYs);
+            } else {
+              top=Number(bolt.getAttribute("y"));bottom=top+Number(bolt.getAttribute("height"));
+            }
+            close((bottom-top)/scale,12);
+            close((top-Number(hole.getAttribute("y")))/scale,2);
+            close((Number(hole.getAttribute("y"))+Number(hole.getAttribute("height"))-bottom)/scale,2);
+            assert.ok(hole.compareDocumentPosition(bolt)&4,"通し穴の後にボルトを描く");
+            close(Number(doc.querySelector('[data-row="bore-right"]').getAttribute("height"))/scale,12);
+            assert.equal(doc.documentElement.dataset.holeDiameter,"16");assert.equal(doc.documentElement.dataset.boltDiameter,"12");
+            assert.match(doc.documentElement.textContent,/穴φ16・ボルトφ12/);
+            assert.equal(JSON.stringify(r),before);
+          } finally { dom.window.close(); }
+        }
+});
+
 test("外形未設定の平座金はボルトの下に隠れず、破線の仮表示として残る", async () => {
   const m=Object.assign(calc.createModel(data),{boltType:'single',column:'120',clearance:'150',rightSeat:'recess'});
   const flat=data.parts.find(part=>part.id==='flat');
@@ -48,6 +86,8 @@ test("外ツラの2部材・接面・座彫り28と長さは、片引き・両�
       try{
         const doc=dom.window.document,member1=doc.querySelector('[data-row="member-1"]'),member2=doc.querySelector('[data-row="member-2"]');
         const w1=Number(member1.getAttribute('width')),w2=Number(member2.getAttribute('width')),scale=w1/180;
+        assert.ok(Number(member1.getAttribute('height'))>Math.max(w1,w2),'長さ方向を成より長く見せる');
+        assert.equal(member1.getAttribute('height'),member2.getAttribute('height'));
         assert.ok(Math.abs(w2/210-scale)<0.0001);
         assert.ok(Math.abs(Number(member1.getAttribute('x'))+w1-Number(member2.getAttribute('x')))<0.002);
         assert.equal(doc.querySelectorAll('[data-member-break]').length,4);
@@ -64,6 +104,14 @@ test("外ツラの2部材・接面・座彫り28と長さは、片引き・両�
         assert.equal(doc.querySelector('[data-row="depth"]'),null);
         for(const text of [...doc.querySelectorAll('text')].filter(el=>/梁の側面|柱どうし/.test(el.textContent)))assert.equal(text.closest('[transform]'),null);
         assert.ok(!/NaN|Infinity|undefined/.test(svg));assert.equal(JSON.stringify(r),before);
+        const [, , viewWidth,viewHeight]=doc.documentElement.getAttribute('viewBox').split(' ').map(Number);
+        for(const hit of doc.querySelectorAll('.edit-hit')) {
+          const x=Number(hit.getAttribute('x')),y=Number(hit.getAttribute('y'));
+          for(let [px,py] of [[x,y],[x+Number(hit.getAttribute('width')),y+Number(hit.getAttribute('height'))]]) {
+            if(direction==='vertical')[px,py]=[1140-py,10+px];
+            assert.ok(px>=0 && px<=viewWidth && py>=0 && py<=viewHeight,'寸法の入力位置を図の内側へ収める');
+          }
+        }
         if(options.workspace && boltType==='single')await sharp(Buffer.from(svg)).png().toFile(path.join(out,`outside-${direction}.png`));
       }finally{dom.window.close();}
     }

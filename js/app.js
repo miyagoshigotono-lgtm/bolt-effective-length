@@ -911,6 +911,7 @@
       if (model.leftSeat === "box")
         lines.push("柱の左端〜左の穴の内側：" + model.leftBoxPosition + " mm");
     }
+    lines.push(`ボルト穴径 ${data.dimensions.holeDiameter} mm / ボルト径 ${data.dimensions.boltDiameter} mm`);
     for (const side of ["left", "right"]) {
       const p = result.washers[side];
       lines.push(

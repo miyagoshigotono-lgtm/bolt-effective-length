@@ -313,6 +313,9 @@
         `<path d="M ${num(x)} ${num(top)} l -4 ${num((bottom - top) / 4)} l 8 ${num((bottom - top) / 2)} l -4 ${num((bottom - top) / 4)}" fill="none" stroke="#516e62" stroke-width="1.5"/>`,
       );
     }
+    // 木部の通し穴はφ16、軸はφ12。座彫り・ボックス穴とナットのねじ穴は区別する。
+    rect(g.start, -d.holeDiameter/2, Math.max(0,g.end-g.start), d.holeDiameter,
+      "#ffffff", "bolt-hole", "#516e62");
     for (const side of ["left", "right"]) {
       const seat = m[side + "Seat"],
         face = side === "left" ? g.start : g.end;
@@ -368,8 +371,8 @@
         const nutX = side === "left" ? face - p.axial - 10 : face + p.axial;
         rect(nutX, -10.95, 10, 21.9, "#d4dce2", "nut-" + side, "#596b7d");
         // 軸断面のねじ穴を空け、ナットの途中で止まるボルト先端を見えるようにする。
-        rect(nutX, -6, 10, 12, "#ffffff", "bore-" + side, "none");
-        for (const dy of [-6, 6])
+        rect(nutX, -d.boltDiameter/2, 10, d.boltDiameter, "#ffffff", "bore-" + side, "none");
+        for (const dy of [-d.boltDiameter/2, d.boltDiameter/2])
           line(
             X(nutX),
             axis + dy * scale,
@@ -392,7 +395,7 @@
       // 一体の頭と軸を一つの輪郭で描く。頭の比率は形状表示用で、実寸ではない。
       const seat = X(g.boltStart),
         tip = X(g.boltEnd),
-        shaftHalf = 6 * scale,
+        shaftHalf = d.boltDiameter/2 * scale,
         headWidth = shaftHalf * 1.5,
         headHalf = shaftHalf * 1.8,
         bevel = shaftHalf * 0.35,
@@ -405,9 +408,9 @@
     } else if (!options.preview && g.boltEnd > g.boltStart)
       rect(
         g.boltStart,
-        -6,
+        -d.boltDiameter/2,
         g.boltEnd - g.boltStart,
-        12,
+        d.boltDiameter,
         "#b9c6cf",
         "bolt",
         "#536577",
@@ -437,7 +440,7 @@
       outside ? heading : chart,
       outside ? width/2 : 500,
       24,
-      outside ? (vertical?"梁の側面・タテボルト":"柱どうし・ヨコボルト")+" / 単位 mm" : "平面・ボルト軸の断面 / 単位 mm",
+      outside ? (vertical?"梁の側面・タテボルト":"柱どうし・ヨコボルト")+" / 単位 mm" : "平面・ボルト軸の断面 / 穴φ16・ボルトφ12 / 単位 mm",
       outside ? width-40 : 850,
       16,
       "#334b45",
@@ -456,7 +459,7 @@
         800,
         15,
       );
-    if (outside) text(heading,width/2,56,"外ツラ～外ツラ / 部材長さ方向は省略",width-40,13,"#5b6878","middle");
+    if (outside) text(heading,width/2,56,"外ツラ～外ツラ / 部材長さ方向は省略 / 穴φ16・ボルトφ12",width-40,13,"#5b6878","middle");
     const startY = vertical ? 1020 : outside ? 1095 : 505;
     let heights = [];
     const cols = options.workspace ? [] : outside
@@ -645,7 +648,7 @@
       ? ` transform="translate(${outside ? 1140 : 600}, 10) rotate(90)"`
       : "";
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${num(bottom + 20)}" role="${options.interactive ? "group" : "img"}" aria-label="穴と木部とボルトの寸法図"
-      data-effective="${options.preview ? "" : r.effective}" data-selected="${options.preview ? "" : (r.selected ?? "")}" data-required="${options.preview ? "" : r.required}"${outside ? '' : ` data-bolt-depth="${g.boltDepth}"`}${options.preview ? ' data-preview="true"' : ""}>
+      data-effective="${options.preview ? "" : r.effective}" data-selected="${options.preview ? "" : (r.selected ?? "")}" data-required="${options.preview ? "" : r.required}" data-hole-diameter="${d.holeDiameter}" data-bolt-diameter="${d.boltDiameter}"${outside ? '' : ` data-bolt-depth="${g.boltDepth}"`}${options.preview ? ' data-preview="true"' : ""}>
       <title>${options.preview ? "未計算の入力図" : esc(m.name) + " / E " + fmt(r.effective) + " / L " + (r.selected ?? "該当なし")}</title>
       <metadata>${esc(JSON.stringify(options.preview ? { specVersion: data.specVersion, model: current, state: "preview" } : { specVersion: data.specVersion, model: m, result: r }))}</metadata>
       <defs><pattern id="${id}" width="9" height="9" patternUnits="userSpaceOnUse"><rect width="9" height="9" fill="#f1f7f3"/><path d="M-2 9 L9-2 M7 11 L11 7" stroke="#ccd9ca" stroke-width="0.8"/></pattern></defs>
