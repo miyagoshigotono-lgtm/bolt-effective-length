@@ -37,8 +37,8 @@
       "kind": "washer",
       "standard": "提供図の例",
       "axial": "4.5",
-      "outer": "",
-      "source": "通常の有効長初期値.pdf・4.5の寸法注記",
+      "outer": "39",
+      "source": "通常の有効長初期値.pdf・厚さ4.5 / 利用者指定・外形39（スプリング付座金と同じ）",
       "shape": "flat"
     },
     {

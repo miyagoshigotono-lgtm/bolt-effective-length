@@ -144,6 +144,31 @@ test("資料の座金4種類と左右の組合せを反映", () => {
   assert.equal(r.geometry.leftOuter, 7.5);
   assert.equal(r.geometry.rightOuter, 335.5);
 });
+
+test("平座金は厚さ4.5・外形39で、スプリング付と同じ外形を使う",()=>{
+  const flat=data.parts.find(part=>part.id==='flat'),spring=data.parts.find(part=>part.id==='spring');
+  assert.equal(flat.axial,'4.5');assert.equal(flat.outer,'39');assert.equal(flat.outer,spring.outer);
+  const m=model('single');
+  for(const side of ['left','right'])m.washers[side]={partId:'flat',axial:flat.axial,outer:flat.outer};
+  const r=run(m);assert.equal(r.required,296);assert.equal(r.selected,300);
+  for(const side of ['left','right'])assert.equal(r.washers[side].outer,39);
+  assert.ok(!r.warnings.some(w=>w.includes('外形は未設定')));
+});
+
+test("保存済みの平座金の未設定外形を補い、指定済みの異なる外形と元文書は残す",()=>{
+  const current=model('single');
+  for(const side of ['left','right'])current.washers[side]={partId:'flat',axial:'4.5',outer:'39'};
+  const doc=calc.exportDocument(current,data);
+  doc.model.washers.left.outer='';doc.model.washers.right.outer='60';
+  const original=JSON.stringify(doc),restored=calc.importDocument(doc,data);
+  assert.deepEqual(restored.washers.left,{partId:'flat',axial:'4.5',outer:'39'});
+  assert.deepEqual(restored.washers.right,{partId:'custom',axial:'4.5',outer:'60'});
+  const r=run(restored);assert.equal(r.required,296);assert.equal(r.selected,300);
+  assert.equal(JSON.stringify(doc),original);
+  assert.deepEqual(calc.upgradeModel(restored,data),restored);
+  doc.model.washers.right={partId:'flat',axial:'5',outer:'60'};
+  assert.throws(()=>calc.importDocument(doc,data));
+});
 test("座金の手入力と未設定外形を分ける", () => {
   const m = model();
   m.washers.left = { partId: "custom", axial: "5.1", outer: "" };

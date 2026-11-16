@@ -47,10 +47,29 @@ test("通常・外ツラの木部の通し穴は16 mm、ボルト軸は12 mmで�
         }
 });
 
-test("外形未設定の平座金はボルトの下に隠れず、破線の仮表示として残る", async () => {
+test("平座金の外形は通常・外ツラ・タテヨコ・全出力でスプリング付の底板と同じ",()=>{
+  for(const mode of ['joint','direct','outside'])for(const boltType of ['single','double'])for(const direction of ['horizontal','vertical']){
+    const m=Object.assign(calc.createModel(data),{mode,boltType,direction,member1Height:'180',member2Height:'210',leftSeat:'recess',rightSeat:'recess'});
+    m.washers.left={partId:'flat',axial:'4.5',outer:'39'};
+    m.washers.right={partId:'spring',axial:'10.5',outer:'39'};
+    const r=calc.calculate(m,data);assert.equal(r.ok,true);
+    for(const options of [{compact:true,interactive:true,workspace:true},{},{compact:true,print:true}]){
+      const dom=new JSDOM(drawing.render(r,data,options),{contentType:'image/svg+xml'});
+      try{
+        const doc=dom.window.document,left=doc.querySelector('[data-row="washer-left"]'),right=doc.querySelector('[data-row="washer-right"]');
+        assert.equal(left.getAttribute('height'),right.getAttribute('height'));
+        assert.equal(left.getAttribute('y'),right.getAttribute('y'));
+        assert.equal(left.getAttribute('width'),right.getAttribute('width'),'どちらも底板の厚さは4.5 mm');
+        assert.equal(left.hasAttribute('stroke-dasharray'),false);
+        assert.equal(r.washers.left.outer,39);
+      }finally{dom.window.close();}
+    }
+  }
+});
+
+test("外形未設定の任意座金はボルトの下に隠れず、破線の仮表示として残る", async () => {
   const m=Object.assign(calc.createModel(data),{boltType:'single',column:'120',clearance:'150',rightSeat:'recess'});
-  const flat=data.parts.find(part=>part.id==='flat');
-  for(const side of ['left','right'])m.washers[side]={partId:flat.id,axial:flat.axial,outer:flat.outer};
+  for(const side of ['left','right'])m.washers[side]={partId:'custom',axial:'4.5',outer:''};
   for(const direction of ['horizontal','vertical']){
     m.direction=direction;
     const r=calc.calculate(m,data),before=JSON.stringify(r);

@@ -990,12 +990,15 @@ test("座金の再描画後も上下ボタンは重複せず、固定値と手�
   assert.equal(fixed.disabled, true);
   step(a, "diagram-axial", 1);
   assert.equal(a.model().washers.right.axial, "4.5");
-  a.input("#diagram-outer", "39");
+  assert.equal(a.get('#diagram-custom-fields').hidden,true);
+  assert.equal(a.get('[data-input="diagram-outer"][data-step="1"]').disabled,true);
   step(a, "diagram-outer", 1);
-  assert.equal(a.model().washers.right.outer, "40");
+  assert.equal(a.model().washers.right.outer, "39");
   a.change("#diagram-option", "custom");
   a.input("#diagram-axial", "5.1");
   a.input("#diagram-outer", "39");
+  step(a, "diagram-outer", 1);
+  assert.equal(a.model().washers.right.outer, "40");
   step(a, "diagram-axial", 1);
   assert.equal(a.model().washers.right.axial, "6.1");
   assert.equal(a.get("#washer-right-axial").value, "6.1");
@@ -1007,6 +1010,26 @@ test("座金の再描画後も上下ボタンは重複せず、固定値と手�
     2,
   );
   assert.equal(a.doc.querySelectorAll("label button[data-step]").length, 0);
+});
+
+test("平座金を使っていた自動保存も39 mmで復元し、選定長・保存・印刷を維持する",async t=>{
+  const calc=require('../js/calculator.js'),data=require('../data/defaults.json');
+  const legacy=calc.createModel(data);legacy.boltType='single';
+  for(const side of ['left','right'])legacy.washers[side]={partId:'flat',axial:'4.5',outer:''};
+  const workspace={version:1,current:{model:legacy,savedId:null},history:[]},before=JSON.stringify(workspace);
+  const a=setup(t,workspace);
+  assert.equal(a.result().ok,true);assert.equal(a.result().required,296);assert.equal(a.result().selected,300);
+  for(const side of ['left','right']){
+    assert.equal(a.model().washers[side].outer,'39');
+    assert.equal(a.get(`#drawing [data-row="washer-${side}"]`).hasAttribute('stroke-dasharray'),false);
+  }
+  assert.ok(!a.get('#warnings').textContent.includes('外形は未設定'));
+  a.open('washer-right');assert.match(a.get('#diagram-part-size').textContent,/厚さ 4.5 mm \/ 外形 39 mm/);
+  assert.equal(a.get('#diagram-custom-fields').hidden,true);a.click('#close-diagram');
+  a.save('座金確認');a.click('#export');const doc=JSON.parse(await a.downloads.at(-1).text());
+  assert.equal(doc.model.washers.right.outer,'39');assert.equal(doc.result.selected,300);
+  assert.match(a.get('#print-conditions').textContent,/平座金：厚さ 4.5 \/ 外形 39 mm/);
+  assert.equal(JSON.stringify(workspace),before);
 });
 
 test("上下変更で飛び出し警告を再計算し、印刷・保存・SVG・履歴も同じ数値", async (t) => {
