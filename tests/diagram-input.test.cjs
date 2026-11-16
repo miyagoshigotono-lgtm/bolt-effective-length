@@ -263,6 +263,72 @@ test("図の柱と穴位置を直接変更すると計算・保存・寸法の�
   assert.ok(a.get("#dimension-summary").textContent.includes("ボルト深さ 52"));
 });
 
+test("自動選定では連続入力ごとに図・結果・カタログが同じ有効長とボルト長へ更新される",t=>{
+  for(const outside of [false,true]) {
+    const a=setup(t);a.type('single');
+    if(outside) {
+      a.click('#joint-tab-pattern');a.click('[data-pattern="outside"]');
+      a.input('#member1Height','120');a.input('#member2Height','150');
+    }
+    const key=outside?'member2Height':'clearance';
+    a.open(key);
+    for(const value of ['150','151','171','180','205']) {
+      a.input('#diagram-value',value);
+      const r=a.result(),svg=a.get('#drawing svg');
+      assert.equal(r.ok,true);assert.equal(a.model().candidate,'auto');
+      assert.equal(svg.dataset.effective,String(r.effective));assert.equal(svg.dataset.selected,String(r.selected));
+      assert.equal(a.get('#result-selected').textContent,String(r.selected));
+      assert.equal(a.get('#catalog .selected').dataset.length,String(r.selected));
+      assert.match(svg.textContent,new RegExp(`有効長 E ${r.effective}`));
+      assert.match(svg.textContent,new RegExp(`ボルト L ${r.selected}`));
+      assert.equal(a.get('#catalog-selection-mode').textContent,'自動選定');
+    }
+  }
+});
+
+test("手動の長さ保持と赤の不足を明示し、自動へ戻すと図と候補が追従する",async t=>{
+  const a=setup(t);a.type('single');
+  a.click('#joint-tab-pattern');a.click('[data-pattern="outside"]');
+  a.input('#member1Height','120');a.input('#member2Height','150');
+  a.click('#catalog [data-length="210"]');
+  assert.equal(a.result().required,233);assert.equal(a.result().status,'short');
+  assert.equal(a.get('#catalog-selection-mode').textContent,'手動：210 mm固定・23 mm不足');
+  assert.equal(a.get('#catalog-auto').hidden,false);
+  assert.match(a.get('#catalog .selected.too-short').getAttribute('aria-label'),/選択中・長さ不足/);
+  a.input('#member1Height','150');a.input('#member2Height','180');
+  assert.equal(a.result().effective,274);assert.equal(a.result().proposal,300);assert.equal(a.result().selected,210);
+  assert.equal(a.get('#drawing svg').dataset.effective,'274');assert.equal(a.get('#drawing svg').dataset.selected,'210');
+  assert.equal(a.get('#catalog .proposed').dataset.length,'300');
+  assert.equal(a.get('#catalog-selection-mode').textContent,'手動：210 mm固定・83 mm不足');
+  const restored=setup(t,JSON.parse(a.w.localStorage.getItem(workspaceKey)));
+  assert.equal(restored.get('#catalog-selection-mode').textContent,'手動：210 mm固定・83 mm不足');
+  a.click('#catalog-auto');
+  assert.equal(a.model().candidate,'auto');assert.equal(a.result().effective,274);assert.equal(a.result().selected,300);
+  assert.equal(a.get('#drawing svg').dataset.selected,'300');assert.equal(a.get('#catalog .selected').dataset.length,'300');
+  assert.equal(a.get('#catalog-auto').hidden,true);assert.equal(a.doc.querySelector('#catalog .selected.too-short'),null);
+  assert.match(a.get('#catalog-source').textContent,/赤：選択中で長さ不足/);
+  a.click('#undo');assert.equal(a.model().candidate,'210');assert.equal(a.get('#drawing svg').dataset.selected,'210');
+  a.click('#redo');assert.equal(a.model().candidate,'auto');assert.equal(a.get('#drawing svg').dataset.selected,'300');
+  assert.ok(a.get('#print-drawing').innerHTML.includes('data-selected="300"'));
+  a.click('#export');const doc=JSON.parse(await a.downloads.at(-1).text());
+  assert.equal(doc.model.candidate,'auto');assert.equal(doc.result.selected,300);
+});
+
+test("手動へ戻すボタンで候補欄の高さが変わっても、描画を変更後の領域へ収める",t=>{
+  const a=setup(t);a.type('single');a.mode('direct');
+  const original=Object.getOwnPropertyDescriptor(a.w.Element.prototype,'clientHeight');
+  Object.defineProperty(a.w.Element.prototype,'clientHeight',{configurable:true,get(){
+    return this.id==='drawing-canvas'?(a.get('#catalog-auto').hidden?420:300):original.get.call(this);
+  }});
+  a.input('#effective','200');
+  assert.ok(parseFloat(a.get('#drawing svg').style.height)>300);
+  a.change('#candidate','210');
+  assert.equal(a.get('#catalog-auto').hidden,false);
+  assert.ok(parseFloat(a.get('#drawing svg').style.height)<=300);
+  a.click('#catalog-auto');
+  assert.ok(parseFloat(a.get('#drawing svg').style.height)>300);
+});
+
 test("左のボックス穴は穴位置の項目を出さず、有効長の直接入力へ切り替える", (t) => {
   const a = setup(t);
   a.type();

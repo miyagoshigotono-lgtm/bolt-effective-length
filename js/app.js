@@ -406,6 +406,12 @@
   }
   function renderCatalog() {
     const c = data.catalogs[model.boltType];
+    const manual = !!c && model.candidate !== "auto";
+    $("catalog-selection-mode").textContent = !c ? "" : manual
+      ? `手動：${model.candidate} mm固定${result.ok && result.status==="short" ? `・${calc.format(-result.excess)} mm不足` : ""}`
+      : "自動選定";
+    $("catalog-selection-mode").className = `catalog-selection-mode${manual ? " manual" : ""}${manual && result.ok && result.status==="short" ? " short" : ""}`;
+    $("catalog-auto").hidden = !manual;
     $("candidate").innerHTML = selectOptions(
       [
         ["auto", "必要長以上の最小候補"],
@@ -423,7 +429,7 @@
       ? `${c.lengths.length}種 · ${c.product}`
       : "ボルト種別未選択";
     $("catalog-source").textContent = c
-      ? `${c.source} ／ 版 ${c.version} ／ 単位 mm`
+      ? `青：選択中 ／ 赤：選択中で長さ不足 ／ 灰：長さ不足 ／ 青枠：自動の最小候補　｜　${c.source} ／ 版 ${c.version} ／ 単位 mm`
       : "";
     $("catalog").innerHTML = c
       ? c.lengths
@@ -431,13 +437,9 @@
             const short = result.ok && n < result.required,
               chosen = result.ok && n === result.selected,
               proposed = result.ok && n === result.proposal;
-            const state = short
-              ? "不足"
-              : chosen
-                ? "採用候補"
-                : proposed
-                  ? "最小候補"
-                  : "掲載長さ";
+            const state = chosen
+              ? (short ? "選択中・長さ不足" : manual ? "手動で選択中" : "自動で選択中")
+              : proposed ? "自動の最小候補" : short ? "長さ不足" : "掲載長さ";
             return `<button type="button" data-length="${n}" class="${short ? "too-short " : ""}${chosen ? "selected " : ""}${proposed ? "proposed" : ""}" aria-pressed="${chosen}" aria-label="${n} mm・${state}" title="${n} mm・${state}">${n}</button>`;
           })
           .join("")
@@ -862,14 +864,14 @@
       $("drawing").style.width = "";
       $("drawing").style.height = "";
     }
-    applyZoom();
     renderCatalog();
     refocus(focused);
     highlightFocusedRow();
     recordChange();
     renderPrintConditions();
     refreshNumberControls();
-    positionEditor();
+    // 候補欄・警告・入力欄の高さが変わった後の領域へ、最新の図を収める。
+    applyZoom();
   }
   function renderPrintConditions() {
     document.body.classList.toggle(
@@ -1294,6 +1296,10 @@
   });
   $("candidate").addEventListener("change", (event) => {
     model.candidate = event.target.value;
+    renderOutput();
+  });
+  $("catalog-auto").addEventListener("click", () => {
+    model.candidate = "auto";
     renderOutput();
   });
   $("catalog").addEventListener("click", (event) => {
