@@ -96,14 +96,17 @@
       g.column == null ? Infinity : 0,
     );
     const max = Math.max(g.end + (m.rightSeat === "box" ? 78 : 28), g.boltEnd);
+    // 外形未設定の座金は、ボルトの下へ隠れない破線の目印にする。
+    // この仮外形は作図だけに使い、実寸・計算結果・保存値へは戻さない。
+    const washerOuter = (part) => part.outer ?? d.boltDiameter * 2;
     const scale = Math.min(
       760 / (max - min),
       170 /
         Math.max(
           g.width,
           g.column ?? 0,
-          r.washers.left.outer ?? 12,
-          r.washers.right.outer ?? 12,
+          washerOuter(r.washers.left),
+          washerOuter(r.washers.right),
           21.9,
         ),
     );
@@ -309,7 +312,7 @@
       );
       if (options.preview) continue;
       const p = r.washers[side],
-        outer = p.outer ?? 12;
+        outer = washerOuter(p);
       const wx = side === "left" ? face - p.axial : face;
       const stepped = p.partId === "spring" || p.partId === "tight";
       const baseX = stepped && side === "left" ? face - 4.5 : wx;

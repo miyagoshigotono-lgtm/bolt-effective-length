@@ -9,6 +9,34 @@ const drawing = require("../js/drawing.js");
 const data = require("../data/defaults.json");
 const out = path.join(__dirname, "diagram-output");
 
+test("外形未設定の平座金はボルトの下に隠れず、破線の仮表示として残る", async () => {
+  const m=Object.assign(calc.createModel(data),{boltType:'single',column:'120',clearance:'150',rightSeat:'recess'});
+  const flat=data.parts.find(part=>part.id==='flat');
+  for(const side of ['left','right'])m.washers[side]={partId:flat.id,axial:flat.axial,outer:flat.outer};
+  for(const direction of ['horizontal','vertical']){
+    m.direction=direction;
+    const r=calc.calculate(m,data),before=JSON.stringify(r);
+    assert.equal(r.ok,true);assert.equal(r.effective,214);assert.equal(r.selected,240);
+    for(const options of [{compact:true,interactive:true,workspace:true},{},{compact:true,print:true}]){
+      const svg=drawing.render(r,data,options),dom=new JSDOM(svg,{contentType:'image/svg+xml'});
+      try{
+        const doc=dom.window.document,bore=doc.querySelector('[data-row="bore-right"]');
+        for(const side of ['left','right']){
+          const plate=doc.querySelector(`[data-row="washer-${side}"]`);
+          assert.equal(r.washers[side].outer,null);
+          assert.equal(plate.getAttribute('stroke-dasharray'),'3 2');
+          assert.ok(Number(plate.getAttribute('height'))>Number(bore.getAttribute('height')),'座金の仮外形がボルト径より大きい');
+        }
+        const {data:pixels,info}=await sharp(Buffer.from(svg)).removeAlpha().raw().toBuffer({resolveWithObject:true});
+        let gold=0;
+        for(let i=0;i<pixels.length;i+=info.channels)if(pixels[i]===255 && pixels[i+1]===225 && pixels[i+2]===161)gold++;
+        assert.ok(gold>0,'描画後も座金の色がボルトの外側に見える');
+        assert.equal(JSON.stringify(r),before);
+      }finally{dom.window.close();}
+    }
+  }
+});
+
 test("32通りの入力図で編集対象と寸法が一致し、数値のタップ領域が図外へ出ない", async () => {
   await fs.mkdir(out, { recursive: true });
   for (const direction of ["horizontal", "vertical"])
