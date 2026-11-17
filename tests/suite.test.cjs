@@ -21,6 +21,43 @@ function suite(t, { hash = "", stored = null, blocked = false } = {}) {
   return { w: dom.window, tab, panel, frame: (id) => panel(id).querySelector("iframe") };
 }
 
+test("起動時は本文の解析前から隠し、保存したタブを復元してから表示する", (t) => {
+  const dom = new JSDOM(read("index.html"), { url: "https://example.test/tools/", runScripts: "outside-only" });
+  t.after(() => dom.window.close());
+  const { document } = dom.window;
+  const script = document.querySelector('script[src^="js/suite.js"]');
+  assert.equal(script.defer, false);
+  assert.equal(script.parentElement, document.head);
+  const body = document.body;
+  body.remove();
+  dom.window.localStorage.setItem("wood-calculators.active.v1", "bolt");
+  dom.window.eval(read("js/suite.js"));
+  assert.equal(document.documentElement.classList.contains("suite-starting"), true);
+  document.documentElement.append(body);
+  document.dispatchEvent(new dom.window.Event("DOMContentLoaded"));
+  assert.equal(document.documentElement.classList.contains("suite-starting"), false);
+  assert.equal(document.querySelector('[aria-selected="true"]').dataset.app, "bolt");
+  assert.equal(document.querySelector("#panel-keraba iframe").hasAttribute("src"), false);
+});
+
+test("初回の画面は復元完了まで読み込み表示とし、切替後も完了済み画面を読み直さない", (t) => {
+  const a = suite(t, { stored: "bolt" });
+  assert.equal(a.panel("bolt").hasAttribute("data-loading"), true);
+  assert.equal(a.panel("bolt").getAttribute("aria-busy"), "true");
+  assert.equal(a.panel("bolt").querySelector('[role="status"]').textContent, "読み込み中…");
+  a.tab("keraba").click();
+  a.frame("bolt").dispatchEvent(new a.w.Event("load"));
+  assert.equal(a.panel("bolt").hasAttribute("data-loading"), false);
+  assert.equal(a.panel("bolt").getAttribute("aria-busy"), "false");
+  assert.equal(a.panel("bolt").getAttribute("aria-hidden"), "true");
+  a.tab("bolt").click();
+  assert.equal(a.panel("bolt").hasAttribute("data-loading"), false);
+  assert.equal(a.panel("keraba").hasAttribute("data-loading"), true);
+  a.frame("keraba").dispatchEvent(new a.w.Event("load"));
+  a.tab("keraba").click();
+  assert.equal(a.panel("keraba").hasAttribute("data-loading"), false);
+});
+
 test("統合画面は選択した計算だけを開き、切替では画面や入力を読み直さない", (t) => {
   const a = suite(t);
   const keraba = a.frame("keraba");
@@ -65,6 +102,13 @@ test("不正な画面指定・保存不能でも外部URLを開かず、旧寸�
   const b = suite(t, { hash: "#dimension-details", stored: "keraba" });
   assert.equal(b.tab("bolt").getAttribute("aria-selected"), "true");
   assert.ok(b.frame("bolt").src.endsWith("#drawing"));
+  assert.equal(b.frame("keraba").hasAttribute("src"), false);
+  assert.equal(b.frame("bolt").getAttribute("src"), b.frame("bolt").dataset.src);
+  assert.equal(b.w.location.pathname, "/tools/");
+  assert.equal(b.w.location.hash, "#dimension-details");
+  const c = suite(t, { hash: "#result-section" });
+  assert.ok(c.frame("bolt").src.endsWith("#result-section"));
+  assert.equal(c.frame("keraba").hasAttribute("src"), false);
 });
 
 function kebiki(t, saved = null, blocked = false) {
