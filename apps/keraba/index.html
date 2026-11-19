@@ -322,9 +322,11 @@
       <fieldset>
         <legend>タルキックⅡ</legend>
         <label class="chk"><input type="checkbox" id="dTarukick" checked>図面の下に表示</label>
+        <label class="chk"><input type="checkbox" id="dTarukickScrew" checked>ビスを表示</label>
         <div class="row"><label for="tarukickEaves">軒の出</label><select id="tarukickEaves" aria-describedby="tarukickEavesHint"><option value="present">軒あり</option><option value="none">軒なし</option></select></div>
         <p id="tarukickEavesHint" class="hint">軒の出30 mm以上は「軒あり」、30 mm未満は「軒なし」を選択します。</p>
         <p id="tarukickStatus" class="hint" role="status" aria-live="polite"></p>
+        <p class="hint">ビスの位置は参考表示です。選定された長さで描きます。</p>
         <p class="hint"><a id="tarukickSource" href="https://www.synegic.co.jp/product/tk/size/" target="_blank" rel="noopener noreferrer">メーカー公式の選定表</a></p>
       </fieldset>
 
@@ -466,7 +468,7 @@ const FIELDS = {
   dHana:'bool', dThick:'bool', dMoya:'bool', dShort:'bool', dClear:'bool', dHatch:'bool',
   d225:'bool', dMoyaW:'bool', dCenter:'bool',
   dHafuW:'bool', dTaruki:'bool', dNoji:'bool', dOverS:'bool', dOverK:'bool', dSlope:'bool',
-  dTarukick:'bool', tarukickEaves:'text',
+  dTarukick:'bool', dTarukickScrew:'bool', tarukickEaves:'text',
   orient:'text', fscale:'num', lscale:'num', note:'text',
   ordHafu:'text',
   ordHafuSp:'text', ordHafuLen:'text', ordHafuQty:'text',
@@ -489,7 +491,7 @@ const DEFAULTS = {
   dHana:true, dThick:true, dMoya:true, dShort:true, dClear:true, dHatch:true,
   d225:true, dMoyaW:true, dCenter:true,
   dHafuW:true, dTaruki:true, dNoji:true, dOverS:true, dOverK:true, dSlope:true,
-  dTarukick:true, tarukickEaves:'',
+  dTarukick:true, dTarukickScrew:true, tarukickEaves:'',
   orient:'landscape', fscale:1, lscale:1, note:'',
   ordHafu:'p3',
   ordHafuSp:'', ordHafuLen:'', ordHafuQty:'',
@@ -632,6 +634,7 @@ function parseProjectDocument(text){
   if(!Object.prototype.hasOwnProperty.call(storedInputs,'notchType')) storedInputs.notchType='center';
   // タルキック追加前の保存にも対応し、既存の入力・作図条件を引き継ぐ。
   if(!Object.prototype.hasOwnProperty.call(storedInputs,'dTarukick')) storedInputs.dTarukick=DEFAULTS.dTarukick;
+  if(!Object.prototype.hasOwnProperty.call(storedInputs,'dTarukickScrew')) storedInputs.dTarukickScrew=DEFAULTS.dTarukickScrew;
   const fields=Object.keys(FIELDS).filter(key=>document.getElementById(key));
   if(Object.keys(storedInputs).some(key=>!fields.includes(key)) || fields.some(key=>!Object.prototype.hasOwnProperty.call(storedInputs,key)))
     throw new Error('保存ファイルの入力項目が一致しません。入力は変更していません。');
@@ -965,7 +968,7 @@ const TARUKICK_TABLES = {
   }}
 };
 function selectTarukick(p){
-  if(!p.dTarukick) return null;
+  if(!p.dTarukick && !p.dTarukickScrew) return null;
   const result=(status,label,detail,code=null)=>({status,label:'タルキックⅡ：'+label,detail,code});
   if(!Number.isFinite(p.hTaruki) || p.hTaruki<=0)
     return result('pending','垂木成を入力','垂木成を入力すると選定結果を表示します');
@@ -981,8 +984,37 @@ function selectTarukick(p){
   const cell=row.find(([lastPitch])=>p.pitch<=lastPitch);
   if(!cell) return result('check','適用外（要確認）',condition+'。公式条件表では適用外です');
   const length=cell[1],code=(length<=165?'TK5-':'TK6-')+length+'Ⅱ';
-  return result('reference',code+'（参考）',
-    condition+`。A寸法${table.a} mm・欠きなし・ビス縁端20 mmの公式表の参考値です。欠き込みの補正はしていません`,code);
+  return {...result('reference',code+'（参考）',
+    condition+`。A寸法${table.a} mm・欠きなし・ビス縁端20 mmの公式表の参考値です。欠き込みの補正はしていません`,code),
+    length, diameter:length<=165?5.5:6, threadLength:40};
+}
+
+// 選定用の条件表と、図に重ねる参考位置を分ける。長さを縮めて収めない。
+function tarukickScrewGeometry(p,g,selection){
+  if(!p.dTarukickScrew || !selection || selection.status!=='reference') return null;
+  const headX=g.moya.xc+Math.min(20,g.moyaSize/4),headY=g.lnD(headX);
+  const point=(x,y)=>[headX+x*g.cos+y*g.sin,headY-x*g.sin+y*g.cos];
+  // 頭径13 mmと線幅を含め、先端まで用紙内へ収める。
+  const bounds=[[-7,-.5],[7,-.5],[-7,selection.length+.5],[7,selection.length+.5]].map(([x,y])=>point(x,y));
+  return {...selection,headX,headY,cos:g.cos,sin:g.sin,bounds};
+}
+
+function renderTarukickScrew(s,k,PX,PY){
+  const n=v=>Math.round(v*10000)/10000;
+  const radius=s.diameter/2,root=1.65,start=s.length-s.threadLength;
+  const matrix=[k*s.cos,-k*s.sin,k*s.sin,k*s.cos,PX(s.headX),PY(s.headY)].map(n).join(' ');
+  const o=[`<g data-tarukick-screw="" data-length="${s.length}" data-diameter="${s.diameter}" data-thread-length="${s.threadLength}" aria-label="タルキックⅡビス ${s.length} mm" transform="matrix(${matrix})" color="#376f8c" stroke="currentColor" stroke-linejoin="round" stroke-linecap="round">`,
+    `<defs><linearGradient id="tk-screw-metal" x1="0%" y1="0%" x2="100%" y2="0%"><stop offset="0%" stop-color="#9bb2c1"/><stop offset="35%" stop-color="#f4f8fb"/><stop offset="65%" stop-color="#c5d6e0"/><stop offset="100%" stop-color="#a3bbc9"/></linearGradient></defs>`,
+    `<path d="M ${-radius} 3.8 L ${radius} 3.8 L ${radius} ${start} L ${root} ${start+1} L ${-root} ${start+1} L ${-radius} ${start} Z" fill="url(#tk-screw-metal)" stroke-width=".65"/>`,
+    `<path data-screw-tip="" d="M ${-root} ${start-.5} L ${root} ${start-.5} L 1.55 ${s.length-6.2} L 0 ${s.length} L -1.55 ${s.length-6.2} Z" fill="#bdd0dc" stroke-width=".6"/>`];
+  // ねじ山は見分けやすい略図とし、ねじ部の長さ40 mmは全品番でそろえる。
+  for(let y=start;y<s.length-7;y+=4.3){
+    const r=y<s.length-10?radius:2.2;
+    o.push(`<path d="M ${-r} ${n(y)} L ${r} ${n(y+1.55)} L ${r} ${n(y+2.25)} L ${-r} ${n(y+.7)} Z" fill="#dbe7ee" stroke-width=".5"/>`);
+  }
+  o.push('<path d="M -6.5 0 L 6.5 0 L 6.15 1 L 4.4 1.75 L '+radius+' 4.3 L '+(-radius)+' 4.3 L -4.4 1.75 L -6.15 1 Z" fill="url(#tk-screw-metal)" stroke-width=".7"/>',
+    '<line x1="-5.8" y1=".45" x2="5.8" y2=".45" stroke="#f8fcff" stroke-width=".45"/>','</g>');
+  return o.join('\n');
 }
 
 /* 多角形を「ライン(x)より下」で切り取る（ケラバカットの落とし部） */
@@ -1036,8 +1068,10 @@ function buildContent(p, g){
   }
   if(g.notchType==='techno') noteLines.push('垂木欠き：テクノ（鉛直10 mm）');
   const tarukick=selectTarukick(p);
+  const screw=tarukickScrewGeometry(p,g,tarukick);
+  const showTarukickLabel=p.dTarukick && tarukick;
   const F_TK=7*FS;
-  const tarukickBand=tarukick ? F_TK*1.35+3 : 0;
+  const tarukickBand=showTarukickLabel ? F_TK*1.35+3 : 0;
   const noteStep = F_NOTE*1.35;
   const yNote2 = SH - 9 - tarukickBand;
   const footT  = yNote2 - (noteLines.length-1)*noteStep - F_NOTE - 5;
@@ -1053,6 +1087,7 @@ function buildContent(p, g){
   const xs = [g.endLC[0], g.endLD[0], g.endRC[0], g.endRD[0], g.moya.xL, g.moya.xR];
   const ys = [g.endLC[1], g.endLD[1], g.endRC[1], g.endRD[1],
               g.moya.yT, g.moya.yT+g.moyaSize];
+  if(screw) screw.bounds.forEach(([x,y])=>{xs.push(x);ys.push(y);});
   for(const pt of [g.rafterS.top,g.rafterS.bottom,g.rafterK.top,g.rafterK.bottom]){
     xs.push(pt[0]); ys.push(pt[1]);
   }
@@ -1411,6 +1446,9 @@ function buildContent(p, g){
 
   /* ---- 注記 ---- */
 
+  // 参考ビスは木部の上へ重ね、印刷・PDFにも同じSVGを使う。
+  if(screw) o.push(renderTarukickScrew(screw,k,PX,PY));
+
   /* ---- 表題・注記ブロック ---- */
   text(SW/2, yTitle, `${p.name||''}　屋根勾配：${pitchLabel}寸`, F_TTL, 'middle', 0, 700);
   if(p.material) text(SW/2, yMat, `（${p.material}）`, F_MAT, 'middle');
@@ -1424,7 +1462,7 @@ function buildContent(p, g){
   if(p.client) text(SW-11, yNote2, p.client, F_SML, 'end');
 
   // 図面の最下段に専用の帯を確保する。発注書の行・図には追加しない。
-  if(tarukick){
+  if(showTarukickLabel){
     o.push(`<g aria-label="タルキックⅡ選定結果" data-status="${tarukick.status}">`);
     text(SW/2, SH-9, tarukick.label, F_TK, 'middle', 0, 700);
     o.push('</g>');
@@ -1632,7 +1670,7 @@ function updateEnabled(p){
   off('tileHafuWidth', noHafu);
   off('tileHafuHeight', noHafu);
   off('clearance', noHafu);          // 破風板が無ければケラバカットも無い
-  off('tarukickEaves', !p.dTarukick);
+  off('tarukickEaves', !p.dTarukick && !p.dTarukickScrew);
   const tarukick=selectTarukick(p);
   $('tarukickStatus').textContent=tarukick ? tarukick.label+'。'+tarukick.detail : '図面には表示しません。';
   $('tarukickSource').href=TARUKICK_TABLES[p.tarukickEaves]?.source || 'https://www.synegic.co.jp/product/tk/size/';

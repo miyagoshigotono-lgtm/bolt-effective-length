@@ -150,7 +150,7 @@ test('条件表にない中間値や範囲外を丸めず、未入力・適用�
   }
   const outside=a.w.selectTarukick({...p,pitch:7});assert.equal(outside.code,null);assert.match(outside.label,/適用外/);
   assert.equal(a.w.selectTarukick({...p,pitch:6.5}).code,'TK5-150Ⅱ');
-  assert.equal(a.w.selectTarukick({...p,dTarukick:false}),null);
+  assert.equal(a.w.selectTarukick({...p,dTarukick:false,dTarukickScrew:false}),null);
 });
 
 test('軒のプルダウンを反映し、図面最下段は品番だけを表示して説明は入力側に置く',t=>{
@@ -170,13 +170,91 @@ test('軒のプルダウンを反映し、図面最下段は品番だけを表�
   a.change('tarukickEaves','none');assert.equal(group().getAttribute('data-status'),'reference');
   assert.match(group().textContent,/TK5-120Ⅱ/);assert.equal(a.get('btnPrintDwg').disabled,false);
   assert.ok(a.get('tarukickSource').href.endsWith('/tk-size-gr-03-md.jpg'));
-  a.change('dTarukick',false);assert.equal(group(),null);assert.equal(a.get('tarukickEaves').disabled,true);
+  a.change('dTarukick',false);assert.equal(group(),null);assert.equal(a.get('tarukickEaves').disabled,false);
   assert.equal(a.get('tarukickEaves').value,'none');
   a.change('dTarukick',true);assert.equal(group().getAttribute('data-status'),'reference');
   assert.equal(a.get('tarukickEaves').disabled,false);
   a.change('pitch','4');assert.match(group().textContent,/TK5-135Ⅱ/);
   a.change('hTaruki','75');assert.match(group().textContent,/TK5-150Ⅱ/);
   a.change('pitch','7');assert.match(group().textContent,/適用外/);
+});
+
+test('ビスと品番を別々に切り替え、両方を消したときだけ軒の選択を無効にする',t=>{
+  const a=keraba(t),screw=()=>a.get('sheet').querySelector('[data-tarukick-screw]');
+  a.change('hTaruki','60');a.change('pitch','1');a.change('tarukickEaves','none');
+  assert.equal(a.get('dTarukickScrew').checked,true);
+  for(const label of [true,false])for(const illustration of [true,false]){
+    a.change('dTarukick',label);a.change('dTarukickScrew',illustration);
+    assert.equal(!!a.get('sheet').querySelector('[aria-label="タルキックⅡ選定結果"]'),label);
+    assert.equal(!!screw(),illustration);
+    assert.equal(a.get('tarukickEaves').disabled,!label&&!illustration);
+    assert.equal(a.get('tarukickEaves').value,'none');
+    assert.equal(a.get('btnPrintDwg').disabled,false);
+  }
+  a.change('dTarukickScrew',true);assert.equal(screw().dataset.length,'120');
+  assert.match(a.get('tarukickStatus').textContent,/TK5-120Ⅱ/);
+  for(const [field,value]of [['pitch','1.33'],['pitch','7'],['hTaruki','61'],['tarukickEaves','']]){
+    a.change(field,value);assert.equal(screw(),null);
+    assert.equal(a.get('btnPrintDwg').disabled,false);
+  }
+});
+
+test('ビスは垂木天から直角に選定長で描き、105 mmのカットを越す15 mmも省略しない',t=>{
+  const a=keraba(t),p={...a.w.getParams(),name:'',pitch:1,hTaruki:60,moyaSize:105,notchRef:22.5,
+    notchType:'center',wHafu:105,fixHafu:true,tHafu:30,tHana:30,tNoji:12,ovShimo:30,ovKami:0,
+    hanaShimo:'kane',hanaKami:'none',tarukickEaves:'none'};
+  const g=a.w.geometry(p),svg=a.w.document.createElement('div');svg.innerHTML=a.w.renderSVG(p);
+  const screw=svg.querySelector('[data-tarukick-screw]'),tip=screw.querySelector('[data-screw-tip]');
+  assert.equal(g.dimMoya.toFixed(1),'48.2');assert.equal(g.dimMoyaShort.toFixed(1),'37.7');
+  assert.equal(screw.dataset.length,'120');assert.equal(screw.dataset.diameter,'5.5');
+  assert.equal(screw.dataset.threadLength,'40');assert.match(tip.getAttribute('d'),/L 0 120 /);
+  const selection=a.w.selectTarukick(p),s=a.w.tarukickScrewGeometry(p,g,selection);
+  assert.equal(s.headY,g.lnD(s.headX));
+  const tipX=s.headX+120*g.sin,tipY=s.headY+120*g.cos;
+  assert.ok(Math.abs((tipY-g.lnCut(tipX))*g.cos-15)<1e-8);
+  const [xx,xy,yx,yy]=screw.getAttribute('transform').match(/matrix\(([^)]+)\)/)[1].split(' ').map(Number);
+  assert.ok(Math.abs(xx*yx+xy*yy)<.0001);
+  assert.ok(Math.abs(yx/yy-g.tan)<.0001);
+  assert.ok(svg.querySelector('linearGradient#tk-screw-metal'));
+});
+
+test('全7品番の長さ・径を図へ反映し、小さい母屋や縦用紙でもビスが用紙内に収まる',t=>{
+  const a=keraba(t);
+  const cases=[[60,1,'present',105,5.5],[60,1,'none',120,5.5],[60,4,'none',135,5.5],
+    [60,6,'none',150,5.5],[90,6,'present',165,5.5],[90,8,'present',185,6],[105,7,'present',200,6]];
+  for(const [hTaruki,pitch,tarukickEaves,length,diameter]of cases)for(const moyaSize of [1,105,300])for(const orient of ['landscape','portrait']){
+    const p={...a.w.getParams(),hTaruki,pitch,tarukickEaves,moyaSize,orient},g=a.w.geometry(p);
+    const svg=a.w.document.createElement('div');svg.innerHTML=a.w.renderSVG(p);
+    const s=svg.querySelector('[data-tarukick-screw]');assert.equal(Number(s.dataset.length),length);
+    assert.equal(Number(s.dataset.diameter),diameter);assert.equal(Number(s.dataset.threadLength),40);
+    assert.match(s.querySelector('[data-screw-tip]').getAttribute('d'),new RegExp('L 0 '+length+' '));
+    const [xx,xy,yx,yy,ox,oy]=s.getAttribute('transform').match(/matrix\(([^)]+)\)/)[1].split(' ').map(Number);
+    assert.ok(Math.abs(Math.hypot(xx,xy)-Math.hypot(yx,yy))<.0001);
+    // 頭の両端と先端を実際のSVG変換で用紙座標へ戻して照合する。
+    for(const [x,y]of [[-7,0],[7,0],[0,length+.5]]){
+      const px=ox+x*xx+y*yx,py=oy+x*xy+y*yy;
+      const [paperX,paperY]=orient==='portrait'?[210-py,px]:[px,py];
+      assert.ok(paperX>=0&&paperX<=(orient==='portrait'?210:297));
+      assert.ok(paperY>=0&&paperY<=(orient==='portrait'?297:210));
+    }
+    assert.ok(Number.isFinite(g.dimMoya));
+  }
+});
+
+test('ビスだけを消しても従来の部材・寸法を維持し、PDF用SVGと同じ図を表示する',t=>{
+  const a=keraba(t);a.change('hTaruki','60');a.change('pitch','1');a.change('tarukickEaves','none');
+  const withScrew=a.get('sheet').firstElementChild.cloneNode(true);
+  withScrew.querySelector('[data-tarukick-screw]').remove();
+  a.change('dTarukickScrew',false);
+  assert.equal(withScrew.outerHTML.replace(/\s+/g,' '),a.get('sheet').firstElementChild.outerHTML.replace(/\s+/g,' '));
+  a.change('dTarukickScrew',true);
+  const rendered=a.w.document.createElement('div');rendered.innerHTML=a.w.renderSVG(a.w.getParams());
+  assert.equal(a.get('sheet').innerHTML,rendered.innerHTML);
+  const printed=[];a.w.requestAnimationFrame=callback=>callback(0);
+  a.w.print=()=>printed.push({mode:a.w.document.body.classList.contains('p-dwg'),
+    length:a.get('sheet').querySelector('[data-tarukick-screw]')?.dataset.length||null});
+  a.get('btnPrintDwg').click();a.change('dTarukickScrew',false);a.get('btnPrintDwg').click();
+  assert.deepEqual(printed,[{mode:true,length:'120'},{mode:true,length:null}]);
 });
 
 test('タルキックの有無と条件は注文書の図・寸法・行を一切変えない',t=>{
@@ -188,16 +266,20 @@ test('タルキックの有無と条件は注文書の図・寸法・行を一�
       a.change('tarukickEaves',tarukickEaves);assert.equal(a.get('sheetOrd').innerHTML,order);
     }
     a.change('dTarukick',false);assert.equal(a.get('sheetOrd').innerHTML,order);
+    a.change('dTarukickScrew',false);assert.equal(a.get('sheetOrd').innerHTML,order);
+    a.change('dTarukickScrew',true);assert.equal(a.get('sheetOrd').innerHTML,order);
     assert.ok(!order.includes('タルキック'));
     a.change('dTarukick',true);
   }
 });
 
 test('以前の水平距離を30 mmで軒あり・軒なしへ移し、不明は未選択として保存を読む',t=>{
-  const a=keraba(t),doc=a.doc();delete doc.inputs.dTarukick;delete doc.inputs.tarukickEaves;
+  const a=keraba(t),doc=a.doc();delete doc.inputs.dTarukick;delete doc.inputs.dTarukickScrew;delete doc.inputs.tarukickEaves;
   const original=JSON.stringify(doc),p=a.w.parseProjectDocument(original);
   assert.equal(p.inputs.dTarukick,true);assert.equal(p.inputs.tarukickEaves,'');assert.equal(JSON.stringify(doc),original);
+  assert.equal(p.inputs.dTarukickScrew,true);
   const b=keraba(t,{saved:{normal:doc.inputs}});assert.equal(b.get('dTarukick').checked,true);
+  assert.equal(b.get('dTarukickScrew').checked,true);
   assert.match(b.get('sheet').textContent,/タルキックⅡ/);
   b.open(doc);assert.equal(b.get('tarukickEaves').value,'');
   for(const [tarukickA,expected]of [[null,''],[-1,''],[0,'none'],[29.999999,'none'],[30,'present'],[139.999,'present'],[140,'present'],[455,'present']]){
@@ -208,35 +290,39 @@ test('以前の水平距離を30 mmで軒あり・軒なしへ移し、不明は
     const loaded=keraba(t,{saved:{normal:legacy.inputs}});assert.equal(loaded.get('tarukickEaves').value,expected);
     b.open(legacy);assert.equal(b.get('tarukickEaves').value,expected);
   }
-  for(const inputs of [{...p.inputs,dTarukick:'true'},{...p.inputs,tarukickEaves:'unknown'},{...p.inputs,tarukickEaves:true},{...doc.inputs,tarukickA:'455'}])
+  for(const inputs of [{...p.inputs,dTarukick:'true'},{...p.inputs,dTarukickScrew:'true'},{...p.inputs,tarukickEaves:'unknown'},{...p.inputs,tarukickEaves:true},{...doc.inputs,tarukickA:'455'}])
     assert.throws(()=>a.open({...doc,inputs}));
   const missing={...doc.inputs};delete missing.pitch;assert.throws(()=>a.open({...doc,inputs:missing}));
 });
 
 test('通常と瓦でタルキックの表示と軒の選択を独立して保存し、クラウドから再現できる',async t=>{
   const remote=cloud(),a=keraba(t,{fetcher:remote.fetcher});
-  a.change('tarukickEaves','none');a.change('dTarukick',false);
+  a.change('tarukickEaves','none');a.change('dTarukick',false);a.change('dTarukickScrew',false);
   const normal=a.doc();
   a.get('tabTile').click();assert.equal(a.get('dTarukick').checked,true);assert.equal(a.get('tarukickEaves').value,'');
+  assert.equal(a.get('dTarukickScrew').checked,true);
   a.change('tarukickEaves','present');a.change('hTaruki','90');
   const tile=a.doc(),tileSVG=a.svg();
   a.get('btnSaveProject').click();a.get('projectSaveName').value='ビス表示確認';await submit(a,'projectSaveForm');
   const restored=keraba(t,{fetcher:remote.fetcher});await openCloud(restored,'ビス表示確認');
   assert.equal(restored.get('tarukickEaves').value,'present');assert.equal(restored.get('dTarukick').checked,true);
+  assert.equal(restored.get('dTarukickScrew').checked,true);
   assert.deepEqual(restored.svg(),tileSVG);
   a.get('tabNormal').click();assert.deepEqual(a.doc().inputs,normal.inputs);
   a.get('tabTile').click();assert.deepEqual(a.doc().inputs,tile.inputs);
   const imported=keraba(t);imported.open(normal);assert.equal(imported.get('dTarukick').checked,false);
+  assert.equal(imported.get('dTarukickScrew').checked,false);
   imported.open(tile);assert.deepEqual(imported.svg(),tileSVG);
 });
 
 test('クラウドの旧距離データも軒の選択へ引き継ぎ、読み込みだけで保存元を書き換えない',async t=>{
   const remote=cloud(),a=keraba(t),legacy=a.doc();
-  delete legacy.inputs.tarukickEaves;legacy.inputs.tarukickA=455;
+  delete legacy.inputs.tarukickEaves;delete legacy.inputs.dTarukickScrew;legacy.inputs.tarukickA=455;
   remote.put('軒の移行確認',legacy);
   const before=remote.file('軒の移行確認').text;
   const loaded=keraba(t,{fetcher:remote.fetcher});await openCloud(loaded,'軒の移行確認');
   assert.equal(loaded.get('tarukickEaves').value,'present');
+  assert.equal(loaded.get('dTarukickScrew').checked,true);
   assert.equal(Object.hasOwn(loaded.doc().inputs,'tarukickA'),false);
   assert.equal(remote.file('軒の移行確認').text,before);
   const group=loaded.get('sheet').querySelector('g[data-status]');
@@ -244,10 +330,12 @@ test('クラウドの旧距離データも軒の選択へ引き継ぎ、読み�
 });
 
 test('リセットではタルキックの表示設定を保ち、軒の選択を未選択へ戻す',t=>{
-  for(const display of [true,false]){
+  for(const display of [true,false])for(const screw of [true,false]){
     const a=keraba(t);a.change('tarukickEaves','present');a.change('dTarukick',display);
+    a.change('dTarukickScrew',screw);
     a.get('btnReset').click();a.get('projectResetConfirm').click();
     assert.equal(a.get('tarukickEaves').value,'');assert.equal(a.get('dTarukick').checked,display);
+    assert.equal(a.get('dTarukickScrew').checked,screw);
     assert.match(a.get('sheet').textContent,/必要な寸法/);
     assert.equal(a.get('sheet').querySelector('[aria-label="タルキックⅡ選定結果"]'),null);
     assert.ok(!a.get('tarukickStatus').textContent.match(/TK[56]-/));
