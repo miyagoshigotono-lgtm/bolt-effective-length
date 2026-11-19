@@ -126,7 +126,7 @@ test('タルキックⅡの画像条件表2枚・全378セルを、適用外の�
 
 test('提示条件の60 mm・1寸・軒なしは120を参照し、表の前提を入力側へ明示する',t=>{
   const a=keraba(t),p={...a.w.getParams(),dTarukick:true,hTaruki:60,pitch:1,moyaSize:105,notchRef:22.5};
-  for(const notchType of ['center','techno'])for(const roofMode of ['normal','tile'])for(const total of [300,1000]){
+  for(const notchType of ['standard','centerNotch','techno'])for(const roofMode of ['normal','tile'])for(const total of [300,1000]){
     const result=a.w.selectTarukick({...p,notchType,roofMode,total,tarukickEaves:'none'});
     assert.equal(result.status,'reference');assert.equal(result.code,'TK5-120Ⅱ');
     assert.match(result.detail,/A寸法0 mm.*欠きなし.*縁端20 mm/);assert.match(result.detail,/欠き込みの補正はしていません/);
@@ -201,7 +201,7 @@ test('ビスと品番を別々に切り替え、両方を消したときだけ�
 
 test('ビスは垂木天から直角に選定長で描き、105 mmのカットを越す15 mmも省略しない',t=>{
   const a=keraba(t),p={...a.w.getParams(),name:'',pitch:1,hTaruki:60,moyaSize:105,notchRef:22.5,
-    notchType:'center',wHafu:105,fixHafu:true,tHafu:30,tHana:30,tNoji:12,ovShimo:30,ovKami:0,
+    notchType:'standard',wHafu:105,fixHafu:true,tHafu:30,tHana:30,tNoji:12,ovShimo:30,ovKami:0,
     hanaShimo:'kane',hanaKami:'none',tarukickEaves:'none'};
   const g=a.w.geometry(p),svg=a.w.document.createElement('div');svg.innerHTML=a.w.renderSVG(p);
   const screw=svg.querySelector('[data-tarukick-screw]'),tip=screw.querySelector('[data-screw-tip]');
@@ -451,9 +451,6 @@ test('テクノ欠きは勾配・母屋寸法・通常の入力値によらず�
     near(g.dimMoya,g.lnCut(g.moya.xL)-g.moya.yT);
     near(g.dimMoyaShort,g.lnCut(g.moya.xR)-g.moya.yT);
     const other=a.w.geometry({...p,notchRef:43});near(other.moya.yT,g.moya.yT);
-    // 同じ欠き位置を母屋芯から指定した場合と、母屋・カット寸法が一致する。
-    const center=a.w.geometry({...p,notchType:'center',notchRef:moyaSize/2-10/(pitch/10)});
-    near(center.moya.yT,g.moya.yT);near(center.dimMoya,g.dimMoya);near(center.dimMoyaShort,g.dimMoyaShort);
     const svg=JSDOM.fragment(a.w.renderSVG(p));
     const dimension=svg.querySelector('g[aria-label="テクノ欠き 鉛直10 mm"]');
     assert.equal(dimension.querySelector('text').textContent,'10');
@@ -466,40 +463,60 @@ test('テクノ欠きは勾配・母屋寸法・通常の入力値によらず�
   assert.equal(JSDOM.fragment(a.w.renderSVG(p)).querySelector('g[aria-label="テクノ欠き 鉛直10 mm"]'),null);
 });
 
-test('垂木欠きの選択は通常の数値を保持し、テクノでは空欄でも作図して保存・復元できる',async t=>{
-  const remote=cloud();
-  for(const mode of ['normal','tile']){
-    const a=keraba(t,{fetcher:remote.fetcher});if(mode==='tile')a.get('tabTile').click();
-    assert.equal(a.get('notchType').value,'center');
-    a.change('notchRef','23.25');a.change('notchType','techno');
-    assert.equal(a.get('notchRef').disabled,true);assert.equal(a.get('notchCenterRow').hidden,true);
-    assert.equal(a.get('technoNotchHint').hidden,false);assert.equal(a.get('notchRef').value,'23.25');
-    a.change('notchType','center');assert.equal(a.get('notchRef').value,'23.25');assert.equal(a.get('notchRef').disabled,false);
-    a.change('notchRef','');a.change('notchType','techno');
-    assert.equal(a.get('drawingRequiredHint').hidden,true);
-    assert.equal(a.get('notchRef').classList.contains('required-missing'),false);
-    const doc=a.doc(),svg=a.svg();
-    const loaded=keraba(t,{saved:{[mode]:doc.inputs}});if(mode==='tile')loaded.get('tabTile').click();
-    assert.deepEqual(loaded.svg(),svg);assert.equal(loaded.get('notchRef').value,'');
-    const imported=keraba(t);imported.open(doc);assert.deepEqual(imported.svg(),svg);
-    a.get('btnSaveProject').click();a.get('projectSaveName').value='欠き選択確認_'+mode;await submit(a,'projectSaveForm');
-    const b=keraba(t,{fetcher:remote.fetcher});await openCloud(b,'欠き選択確認_'+mode);
-    assert.deepEqual(b.doc().inputs,doc.inputs);assert.deepEqual(b.svg(),svg);
-    b.change('notchType','center');assert.equal(b.get('notchRef').classList.contains('required-missing'),true);
+test('標準22.5 mmと芯欠き0 mmは旧自由入力値に左右されず、図と母屋寸法に反映する',t=>{
+  const a=keraba(t),near=(x,y)=>assert.ok(Math.abs(x-y)<1e-8,`${x} != ${y}`);
+  for(const roofMode of ['normal','tile'])for(const pitch of [.5,1.33,4,12])for(const moyaSize of [90,105,120,180]){
+    for(const [notchType,offset]of [['standard',22.5],['centerNotch',0]])for(const notchRef of [null,0,22.5,43]){
+      const p={...a.w.getParams(),roofMode,pitch,moyaSize,notchType,notchRef},g=a.w.geometry(p);
+      near(g.moya.xc-g.moya.xNotch,offset);near(g.moya.yT-g.lnB(g.moya.xc),offset*pitch/10);
+      near(g.dimMoya,g.lnCut(g.moya.xL)-g.moya.yT);
+      near(g.dimMoyaShort,g.lnCut(g.moya.xR)-g.moya.yT);
+      assert.ok(!/NaN|Infinity/.test(a.w.renderSVG(p)));
+    }
   }
 });
 
-test('種類追加前の保存データは通常の母屋芯基準として開き、他の欠損や不正な種類は拒否する',t=>{
-  const a=keraba(t),doc=a.doc();delete doc.inputs.notchType;doc.inputs.notchRef=24.5;
-  const original=JSON.stringify(doc),b=keraba(t);b.open(doc);
-  assert.equal(b.get('notchType').value,'center');assert.equal(b.get('notchRef').value,'24.5');
-  const g=b.w.geometry(b.w.eval('getParams()'));
-  assert.equal(g.moya.xc-g.moya.xNotch,24.5);assert.equal(JSON.stringify(doc),original);
-  const saved=keraba(t,{saved:{normal:doc.inputs}});assert.equal(saved.get('notchType').value,'center');
-  assert.deepEqual(saved.svg(),b.svg());
-  const broken=structuredClone(doc);delete broken.inputs.notchRef;
-  assert.throws(()=>b.open(broken));assert.throws(()=>b.open({...doc,inputs:{...doc.inputs,notchType:'unknown'}}));
-  assert.equal(b.get('notchType').value,'center');
+test('垂木欠きは3択だけで数値を入力せず作図し、通常・瓦の保存・クラウドから復元できる',async t=>{
+  const remote=cloud();
+  for(const mode of ['normal','tile']){
+    const a=keraba(t,{fetcher:remote.fetcher});if(mode==='tile')a.get('tabTile').click();
+    assert.equal(a.get('notchType').value,'standard');assert.equal(a.get('notchRef').type,'hidden');
+    assert.equal(a.get('notchCenterRow'),null);
+    assert.deepEqual([...a.get('notchType').options].map(option=>option.textContent),['未選択','標準','芯欠き','テクノ']);
+    for(const [type,value,hint]of [['standard',22.5,/22.5 mm/],['centerNotch',0,/0 mm/],['techno',null,/鉛直に10 mm/]]){
+      a.change('notchType',type);
+      assert.equal(a.get('drawingRequiredHint').hidden,true);assert.match(a.get('notchHint').textContent,hint);
+      const doc=a.doc(),svg=a.svg();assert.equal(doc.inputs.notchRef,value);
+      const loaded=keraba(t,{saved:{[mode]:doc.inputs}});if(mode==='tile')loaded.get('tabTile').click();
+      assert.deepEqual(loaded.svg(),svg);assert.equal(loaded.doc().inputs.notchRef,value);
+      const imported=keraba(t);imported.open(doc);assert.deepEqual(imported.svg(),svg);
+      const name='欠き選択確認_'+mode+'_'+type;
+      a.get('btnSaveProject').click();a.get('projectSaveName').value=name;await submit(a,'projectSaveForm');
+      const b=keraba(t,{fetcher:remote.fetcher});await openCloud(b,name);
+      assert.deepEqual(b.doc().inputs,doc.inputs);assert.deepEqual(b.svg(),svg);
+    }
+  }
+});
+
+test('旧22.5と0は対応する選択へ移し、その他の旧自由入力は保持して再選択を促す',t=>{
+  const a=keraba(t),base=a.doc();
+  for(const oldType of [undefined,'center'])for(const [notchRef,expected]of [[22.5,'standard'],[0,'centerNotch'],[24.5,''],[null,'']]){
+    const doc=structuredClone(base);doc.inputs.notchRef=notchRef;
+    if(oldType===undefined)delete doc.inputs.notchType;else doc.inputs.notchType=oldType;
+    const original=JSON.stringify(doc),b=keraba(t);b.open(doc);
+    assert.equal(b.get('notchType').value,expected);assert.equal(b.doc().inputs.notchRef,notchRef);
+    assert.equal(JSON.stringify(doc),original);
+    const saved=keraba(t,{saved:{normal:doc.inputs}});assert.deepEqual(saved.svg(),b.svg());
+    if(!expected){
+      assert.equal(b.get('notchType').classList.contains('required-missing'),true);
+      assert.equal(b.get('btnPrintDwg').disabled,true);assert.match(b.get('sheet').textContent,/必要な寸法/);
+      if(notchRef!==null)assert.match(b.get('notchHint').textContent,/24.5 mm.*選んで/);
+      b.change('notchType','standard');assert.equal(b.doc().inputs.notchRef,22.5);
+      assert.equal(b.get('btnPrintDwg').disabled,false);
+    }
+  }
+  const broken=structuredClone(base);delete broken.inputs.notchRef;assert.throws(()=>a.open(broken));
+  assert.throws(()=>a.open({...base,inputs:{...base.inputs,notchType:'unknown'}}));
 });
 
 test('水下カネと水上下部カットは同じ勾配直角オフセットで天端の勾配線へ揃う',t=>{
@@ -596,7 +613,7 @@ test("通常・瓦を別PCへJSONで移し、入力と図・発注書の数値�
 test("途中入力の空欄と小数を勝手に埋めず、読み込み前の両モードへ戻せる", (t) => {
   const source = keraba(t);
   source.change("pitch", "");
-  source.change("notchRef", "23.25");
+  source.change("notchType", "centerNotch");
   const doc = source.doc();
   assert.equal(doc.inputs.pitch, null);
   const target = keraba(t);
@@ -607,7 +624,7 @@ test("途中入力の空欄と小数を勝手に埋めず、読み込み前の�
   const originalTile = target.doc().inputs;
   target.open(doc);
   assert.equal(target.get("pitch").value, "");
-  assert.equal(target.get("notchRef").value, "23.25");
+  assert.equal(target.get("notchType").value, "centerNotch");assert.equal(target.doc().inputs.notchRef,0);
   target.get("tabTile").click();
   assert.deepEqual(target.doc().inputs, originalTile);
   target.get("btnUndoOpen").click();
@@ -679,7 +696,7 @@ test('通常・瓦をクラウドへ保存し、別PCが未接続のまま入力
     if (mode === 'tile') a.get('tabTile').click();
     a.change('pitch', '4.25');
     a.change('name', '保存検証');
-    a.change('notchRef', '');
+    a.change('notchType', '');
     const doc = a.doc(), svg = a.svg();
     a.get('btnSaveProject').click();
     assert.equal(a.get('projectSaveDialog').open, true);
@@ -925,7 +942,7 @@ test('空欄のまま再起動・クラウド保存・読み出しができ、�
 
 test('空欄から必要な寸法を入力すると図を再開し、入力値を既定寸法で置き換えない',t=>{
   const a=keraba(t);a.get('btnReset').click();a.get('projectResetConfirm').click();
-  const values={pitch:'3.5',tNoji:'12',hTaruki:'75',moyaSize:'120',notchType:'center',notchRef:'25',ovShimo:'80',ovKami:'60',
+  const values={pitch:'3.5',tNoji:'12',hTaruki:'75',moyaSize:'120',notchType:'standard',ovShimo:'80',ovKami:'60',
     normalHafuWidth:'35',normalHafuHeight:'180',clearance:'0',hafu:'on',hanaShimo:'none',hanaKami:'none'};
   for(const [key,value]of Object.entries(values))a.change(key,value);
   assert.ok(!a.get('sheet').textContent.includes('必要な寸法を入力'));
@@ -938,13 +955,14 @@ test('リセット後は作図に足りない必須欄だけを示し、0の入�
     const a=keraba(t), missing=id=>a.get(id).classList.contains('required-missing');
     if(mode==='tile')a.get('tabTile').click();
     a.get('btnReset').click();a.get('projectResetConfirm').click();
-    for(const id of ['pitch','tNoji','hTaruki','moyaSize','notchType','notchRef','ovShimo','ovKami','hafu','hanaShimo','hanaKami'])assert.equal(missing(id),true,id);
+    for(const id of ['pitch','tNoji','hTaruki','moyaSize','notchType','ovShimo','ovKami','hafu','hanaShimo','hanaKami'])assert.equal(missing(id),true,id);
+    assert.equal(missing('notchRef'),false);
     for(const id of ['name','material','client','total','zoom'])assert.equal(missing(id),false,id);
     assert.equal(a.get('drawingRequiredHint').hidden,false);
     assert.match(a.get('drawingRequiredHint').textContent,/どれか1つ/);
     for(const id of ['hafu','hanaShimo','hanaKami'])a.change(id,'none');
     for(const id of ['clearance','normalHafuWidth','normalHafuHeight','tileHanaSOffset','tileHanaKOffset','tileHafuOffset'])assert.equal(missing(id),false,id);
-    for(const [id,value]of Object.entries({pitch:'1.33',tNoji:'12',hTaruki:'60',moyaSize:'105',notchType:'center',notchRef:'0',ovShimo:'0',ovKami:'0'}))a.change(id,value);
+    for(const [id,value]of Object.entries({pitch:'1.33',tNoji:'12',hTaruki:'60',moyaSize:'105',notchType:'centerNotch',ovShimo:'0',ovKami:'0'}))a.change(id,value);
     assert.equal(a.get('form').querySelectorAll('.required-missing,.required-reference').length,0);
     assert.equal(a.get('drawingRequiredHint').hidden,true);
     assert.ok(!a.get('sheet').textContent.includes('必要な寸法を入力'));

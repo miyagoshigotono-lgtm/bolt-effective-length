@@ -303,9 +303,9 @@
       <fieldset>
         <legend>母屋</legend>
         <div class="row"><label>母屋 寸法（角）</label><input type="number" id="moyaSize" value="105" step="1"><span class="unit">mm</span></div>
-        <div class="row"><label for="notchType">垂木欠きの種類</label><select id="notchType"><option value="center" selected>通常（母屋芯から）</option><option value="techno">テクノ（上角から10 mm）</option></select></div>
-        <div class="row" id="notchCenterRow"><label for="notchRef">垂木欠き（母屋芯から）</label><input type="number" id="notchRef" value="22.5" step="0.5"><span class="unit">mm</span></div>
-        <p id="technoNotchHint" class="required-hint" hidden>母屋の水下側の上角から、鉛直に10 mm欠きます。</p>
+        <div class="row"><label for="notchType">垂木欠きの種類</label><select id="notchType" aria-describedby="notchHint"><option value="standard" selected>標準</option><option value="centerNotch">芯欠き</option><option value="techno">テクノ</option></select></div>
+        <input type="hidden" id="notchRef" value="22.5">
+        <p id="notchHint" class="hint">標準：母屋芯から22.5 mm。</p>
       </fieldset>
 
       <fieldset>
@@ -482,7 +482,7 @@ const DEFAULTS = {
   hHanaKamiOrder:null, hHanaShimoOrder:null,
   tileHanaSOrder:175, tileHafuAuto:true,
   fixHafu:true, fixHanaKami:false, fixHanaShimo:false,
-  moyaSize:105, notchType:'center', notchRef:22.5,
+  moyaSize:105, notchType:'standard', notchRef:22.5,
   total:500, ovShimo:82, ovKami:58, hafu:'on', hanaShimo:'tatsu', hanaKami:'tatsu',
   clearance:0,
   tileHafuRef:'noji', tileHafuDir:'perpendicular', tileHafuOffset:20,
@@ -522,6 +522,10 @@ function readForm(){
       if(p[k]!==null && !isFinite(p[k])) p[k]=null;
     } else p[k] = el.value;
   }
+  // 保存形式の数値も選択に合わせ、隠れた旧自由入力値で計算しない。
+  if(p.notchType==='standard') p.notchRef=22.5;
+  if(p.notchType==='centerNotch') p.notchRef=0;
+  if(p.notchType==='techno') p.notchRef=null;
   return p;
 }
 function writeForm(p){
@@ -561,6 +565,16 @@ function upgradeTarukickInputs(inputs){
   return upgraded;
 }
 
+function upgradeNotchInputs(inputs){
+  const upgraded={...inputs};
+  const legacy=!Object.prototype.hasOwnProperty.call(upgraded,'notchType') || upgraded.notchType==='center';
+  if(legacy && Object.prototype.hasOwnProperty.call(upgraded,'notchRef')){
+    // 3択にない旧寸法は保持して未選択にし、図・注文書を別寸法で作らない。
+    upgraded.notchType=upgraded.notchRef===22.5?'standard':upgraded.notchRef===0?'centerNotch':'';
+  }
+  return upgraded;
+}
+
 function loadSavedForm(mode){
   const key = STORAGE_KEYS[mode];
   let saved = null;
@@ -592,7 +606,7 @@ function loadSavedForm(mode){
            hHanaKamiOrder:legacyHana!=null?legacyHana:null});
     }
   }catch(e){}
-  return Object.assign({}, mode==='tile'?TILE_DEFAULTS:DEFAULTS, upgradeTarukickInputs(saved||{}));
+  return Object.assign({}, mode==='tile'?TILE_DEFAULTS:DEFAULTS, upgradeNotchInputs(upgradeTarukickInputs(saved||{})));
 }
 
 function saveCurrentForm(){
@@ -624,14 +638,13 @@ function parseProjectDocument(text){
     throw new Error('この形式は開けません。ケラバで保存したJSONファイルを選んでください。');
   if(!['normal','tile'].includes(doc.roofMode) || !doc.inputs || typeof doc.inputs!=='object' || Array.isArray(doc.inputs))
     throw new Error('保存ファイルの屋根種類または入力が正しくありません。');
-  // 種類追加前の保存データは、従来の母屋芯基準として開く。元データは変更しない。
+  // 旧自由入力は、寸法が一致する選択肢へ移す。元データは変更しない。
   if(Object.prototype.hasOwnProperty.call(doc.inputs,'tarukickA')){
     const a=doc.inputs.tarukickA;
     if(a!==null && !(typeof a==='number' && Number.isFinite(a) && Math.abs(a)<=Number.MAX_SAFE_INTEGER))
       throw new Error('保存ファイルに正しくない入力値があります。入力は変更していません。');
   }
-  const storedInputs=upgradeTarukickInputs(doc.inputs);
-  if(!Object.prototype.hasOwnProperty.call(storedInputs,'notchType')) storedInputs.notchType='center';
+  const storedInputs=upgradeNotchInputs(upgradeTarukickInputs(doc.inputs));
   // タルキック追加前の保存にも対応し、既存の入力・作図条件を引き継ぐ。
   if(!Object.prototype.hasOwnProperty.call(storedInputs,'dTarukick')) storedInputs.dTarukick=DEFAULTS.dTarukick;
   if(!Object.prototype.hasOwnProperty.call(storedInputs,'dTarukickScrew')) storedInputs.dTarukickScrew=DEFAULTS.dTarukickScrew;
@@ -811,7 +824,7 @@ function geometry(p){
   const hHana = hTatsu;
 
   const moyaSize = Math.max(10, num(p.moyaSize,105));
-  const notchType = p.notchType==='techno' ? 'techno' : 'center';
+  const notchType = p.notchType==='techno' ? 'techno' : p.notchType==='centerNotch' ? 'centerNotch' : 'standard';
   // 垂木の木口が基準。マイナスなら木口より内側で合板を止める。
   // 空欄（null）なら「合板を切らない」＝垂木と同じ長さで線を止め、小口も寸法も描かない
   const orNull = v => (v===null||v===undefined||!isFinite(v)) ? null : v;
@@ -912,8 +925,9 @@ function geometry(p){
   const xc      = totalW/2;
   const xL      = xc - moyaSize/2;
   // テクノは水下側上角から鉛直10 mm。母屋芯基準の入力値は使用しない。
-  const yT = notchType==='techno' ? lnB(xL)-10 : lnB(xc-num(p.notchRef,22.5));
-  const xNotch = notchType==='techno' ? xL+10/tan : xc-num(p.notchRef,22.5);
+  const fixedNotch=notchType==='centerNotch'?0:22.5;
+  const yT = notchType==='techno' ? lnB(xL)-10 : lnB(xc-fixedNotch);
+  const xNotch = notchType==='techno' ? xL+10/tan : xc-fixedNotch;
   const notchRef = xc-xNotch;
   const moya = {xL, xR:xL+moyaSize, xc, xNotch, yT};
 
@@ -1349,7 +1363,7 @@ function buildContent(p, g){
     if(cut.length>2) poly(cut.map(q=>[PX(q[0]),PY(q[1])]), W_OUT, 'url(#hatch)');
   }
   // テクノは上角からの深さを示し、母屋芯からの欠き位置線は描かない。
-  if(g.notchType==='center') line(PX(M.xNotch),PY(M.yT),PX(M.xNotch),PY(M.yT+g.moyaSize),W_OUT);
+  if(g.notchType!=='techno') line(PX(M.xNotch),PY(M.yT),PX(M.xNotch),PY(M.yT+g.moyaSize),W_OUT);
   if(p.dCenter) line(PX(M.xc),PY(M.yT)-2,PX(M.xc),PY(M.yT+g.moyaSize)+2,W_DIM,'6 1.6 1.2 1.6');
 
   /* ---- 寸法 ---- */
@@ -1645,10 +1659,10 @@ function syncMaterialInputs(p,g){
 
 // 使わない部材の寸法欄は入力できないようにする
 function updateEnabled(p){
-  const techno=p.notchType==='techno';
-  $('notchCenterRow').hidden=techno;
-  $('notchRef').disabled=techno;
-  $('technoNotchHint').hidden=!techno;
+  const notchHints={standard:'標準：母屋芯から22.5 mm。',centerNotch:'芯欠き：母屋芯から0 mm。',techno:'テクノ：母屋の水下側の上角から、鉛直に10 mm欠きます。'};
+  if(notchHints[p.notchType]) $('notchRef').value=p.notchRef===null?'':String(p.notchRef);
+  $('notchHint').textContent=notchHints[p.notchType] || (Number.isFinite(p.notchRef) && ![0,22.5].includes(p.notchRef)
+    ? `以前の自由入力（${p.notchRef} mm）は3択に含まれません。垂木欠きの種類を選んでください。` : '垂木欠きの種類を選んでください。');
   const off = (id, disabled)=>{
     const el = $(id);
     if(!el) return;
@@ -1726,7 +1740,6 @@ function updatePrintWarning(p,g){
 function getDrawingInputState(p){
   const keys=['pitch','tNoji','hTaruki','moyaSize','ovShimo','ovKami'];
   const requiredChoices=['hafu','hanaShimo','hanaKami','notchType'];
-  if(p.notchType!=='techno') keys.push('notchRef');
   if(p.hafu!=='none') keys.push('tHafu','clearance');
   if(p.hanaShimo!=='none' || p.hanaKami!=='none') keys.push('tHana');
   if(p.fixHafu && p.hafu!=='none') keys.push('wHafu');
@@ -1769,6 +1782,7 @@ function updateRequiredDrawingInputs(p,state){
       el.closest('.fixcheck').classList.toggle('required-reference',!!(interactive && reference && !el.checked));
     }
   }
+  $('notchType').setAttribute('aria-describedby',state.missing.has('notchType')?'notchHint drawingRequiredHint':'notchHint');
 }
 function emptySheet(p, order=false){
   const width=order||p.orient==='portrait'?210:297, height=order||p.orient==='portrait'?297:210;
