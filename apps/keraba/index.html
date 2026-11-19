@@ -984,7 +984,7 @@ function selectTarukick(p){
   const cell=row.find(([lastPitch])=>p.pitch<=lastPitch);
   if(!cell) return result('check','適用外（要確認）',condition+'。公式条件表では適用外です');
   const length=cell[1],code=(length<=165?'TK5-':'TK6-')+length+'Ⅱ';
-  return {...result('reference',code+'（参考）',
+  return {...result('reference',code,
     condition+`。A寸法${table.a} mm・欠きなし・ビス縁端20 mmの公式表の参考値です。欠き込みの補正はしていません`,code),
     length, diameter:length<=165?5.5:6, threadLength:40};
 }

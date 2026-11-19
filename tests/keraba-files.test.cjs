@@ -160,7 +160,7 @@ test('軒のプルダウンを反映し、図面最下段は品番だけを表�
   assert.match(a.get('tarukickEavesHint').textContent,/30 mm以上.*軒あり.*30 mm未満.*軒なし/);
   assert.equal(group().getAttribute('data-status'),'pending');
   a.change('tarukickEaves','present');a.change('hTaruki','60');a.change('pitch','1');
-  assert.equal(group().getAttribute('data-status'),'reference');assert.match(group().textContent,/TK5-105Ⅱ/);
+  assert.equal(group().getAttribute('data-status'),'reference');assert.equal(group().textContent.trim(),'タルキックⅡ：TK5-105Ⅱ');
   const texts=[...group().querySelectorAll('text')];
   assert.equal(texts.length,1);assert.equal(Number(texts[0].getAttribute('y')),201);
   assert.ok(!group().textContent.match(/垂木成|A寸法|から施工|140 mm|30 mm/));
