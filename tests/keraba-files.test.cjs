@@ -83,6 +83,116 @@ function keraba(t, { blocked = false, fetcher, owner = 'a'.repeat(64), hash = ''
   };
 }
 
+test('タルキックは公式表の上限を含めて選び、次のサイズへの境界を丸めない',t=>{
+  const a=keraba(t),p=Object.assign(a.w.getParams(),{dTarukick:true,tarukickA:140});
+  const pairs=[[60,'TK5-105Ⅱ'],[75,'TK5-120Ⅱ'],[90,'TK5-135Ⅱ'],[105,'TK5-150Ⅱ'],
+    [120,'TK5-165Ⅱ'],[140,'TK6-185Ⅱ'],[155,'TK6-200Ⅱ']];
+  for(let i=0;i<pairs.length;i++){
+    const [height,code]=pairs[i];
+    for(const hTaruki of [height-0.001,height]){
+      const result=a.w.selectTarukick({...p,hTaruki});
+      assert.equal(result.status,'selected');assert.equal(result.code,code);
+      assert.ok(result.detail.includes(String(hTaruki)+' mm'));
+    }
+    const result=a.w.selectTarukick({...p,hTaruki:height+0.001});
+    assert.equal(result.code,i<pairs.length-1?pairs[i+1][1]:null);
+    if(i===pairs.length-1){assert.equal(result.status,'check');assert.match(result.detail,/範囲外/);}
+  }
+  for(const hTaruki of [null,0,-1,NaN,Infinity]){
+    const result=a.w.selectTarukick({...p,hTaruki});assert.equal(result.status,'pending');assert.equal(result.code,null);
+  }
+});
+
+test('A寸法は空欄なら条件付き、140 mm未満なら未確定とし、図のスケールから推定しない',t=>{
+  const a=keraba(t),p=Object.assign(a.w.getParams(),{dTarukick:true,hTaruki:90});
+  const reference=a.w.selectTarukick({...p,tarukickA:null});
+  assert.equal(reference.status,'reference');assert.equal(reference.code,'TK5-135Ⅱ');
+  assert.match(reference.label,/参考/);assert.match(reference.detail,/140 mm以上/);
+  for(const tarukickA of [0,139,139.999999]){
+    const result=a.w.selectTarukick({...p,tarukickA});assert.equal(result.status,'check');assert.equal(result.code,null);
+    assert.match(result.label,/メーカー確認/);
+  }
+  for(const tarukickA of [-0.01,Infinity,NaN,Number.MAX_SAFE_INTEGER+1]){
+    const result=a.w.selectTarukick({...p,tarukickA});assert.equal(result.status,'pending');assert.equal(result.code,null);
+  }
+  for(const pitch of [1,4,12])for(const notchType of ['center','techno'])for(const total of [300,1000]){
+    const result=a.w.selectTarukick({...p,tarukickA:140,pitch,notchType,total});
+    assert.equal(result.code,'TK5-135Ⅱ');assert.equal(result.status,'selected');
+    assert.equal(a.w.selectTarukick({...p,tarukickA:null,pitch,notchType,total}).status,'reference');
+  }
+});
+
+test('タルキックを図面の最下段へ反映し、表示切替・距離・垂木成の変更で更新する',t=>{
+  const a=keraba(t),group=()=>a.get('sheet').querySelector('[aria-label="タルキックⅡ選定結果"]');
+  assert.equal(group().getAttribute('data-status'),'reference');
+  a.change('tarukickA','140');a.change('hTaruki','75.001');
+  assert.equal(group().getAttribute('data-status'),'selected');assert.match(group().textContent,/TK5-135Ⅱ/);
+  const texts=[...group().querySelectorAll('text')];
+  assert.ok(Number(texts[0].getAttribute('y'))>180);assert.equal(Number(texts[1].getAttribute('y')),201);
+  assert.equal(group().parentElement.lastElementChild,group());
+  assert.match(a.get('tarukickStatus').textContent,/TK5-135Ⅱ/);
+  a.change('tarukickA','139.999');assert.equal(group().getAttribute('data-status'),'check');
+  assert.ok(!group().textContent.includes('TK5-135Ⅱ'));assert.equal(a.get('btnPrintDwg').disabled,false);
+  a.change('dTarukick',false);assert.equal(group(),null);assert.equal(a.get('tarukickA').disabled,true);
+  assert.equal(a.get('tarukickA').value,'139.999');
+  a.change('dTarukick',true);assert.equal(group().getAttribute('data-status'),'check');
+  assert.equal(a.get('tarukickA').disabled,false);
+});
+
+test('タルキックの有無と条件は注文書の図・寸法・行を一切変えない',t=>{
+  const a=keraba(t);
+  for(const roofMode of ['normal','tile']){
+    if(roofMode==='tile')a.get('tabTile').click();
+    const order=a.get('sheetOrd').innerHTML;
+    for(const tarukickA of ['','140','139','-1']){
+      a.change('tarukickA',tarukickA);assert.equal(a.get('sheetOrd').innerHTML,order);
+    }
+    a.change('dTarukick',false);assert.equal(a.get('sheetOrd').innerHTML,order);
+    assert.ok(!order.includes('タルキック'));
+    a.change('dTarukick',true);
+  }
+});
+
+test('タルキック追加前のJSONと端末保存を読み、元データを変えず新しい表示条件を補う',t=>{
+  const a=keraba(t),doc=a.doc();delete doc.inputs.dTarukick;delete doc.inputs.tarukickA;
+  const original=JSON.stringify(doc),p=a.w.parseProjectDocument(original);
+  assert.equal(p.inputs.dTarukick,true);assert.equal(p.inputs.tarukickA,null);assert.equal(JSON.stringify(doc),original);
+  const b=keraba(t,{saved:{normal:doc.inputs}});assert.equal(b.get('dTarukick').checked,true);
+  assert.match(b.get('sheet').textContent,/タルキックⅡ/);
+  b.open(doc);assert.equal(b.get('tarukickA').value,'');
+  for(const inputs of [{...p.inputs,dTarukick:'true'},{...p.inputs,tarukickA:'140'}])
+    assert.throws(()=>a.open({...doc,inputs}));
+  const missing={...doc.inputs};delete missing.pitch;assert.throws(()=>a.open({...doc,inputs:missing}));
+});
+
+test('通常と瓦でタルキックの表示と距離を独立して保存し、クラウドから再現できる',async t=>{
+  const remote=cloud(),a=keraba(t,{fetcher:remote.fetcher});
+  a.change('tarukickA','200');a.change('dTarukick',false);
+  const normal=a.doc();
+  a.get('tabTile').click();assert.equal(a.get('dTarukick').checked,true);assert.equal(a.get('tarukickA').value,'');
+  a.change('tarukickA','140');a.change('hTaruki','90');
+  const tile=a.doc(),tileSVG=a.svg();
+  a.get('btnSaveProject').click();a.get('projectSaveName').value='ビス表示確認';await submit(a,'projectSaveForm');
+  const restored=keraba(t,{fetcher:remote.fetcher});await openCloud(restored,'ビス表示確認');
+  assert.equal(restored.get('tarukickA').value,'140');assert.equal(restored.get('dTarukick').checked,true);
+  assert.deepEqual(restored.svg(),tileSVG);
+  a.get('tabNormal').click();assert.deepEqual(a.doc().inputs,normal.inputs);
+  a.get('tabTile').click();assert.deepEqual(a.doc().inputs,tile.inputs);
+  const imported=keraba(t);imported.open(normal);assert.equal(imported.get('dTarukick').checked,false);
+  imported.open(tile);assert.deepEqual(imported.svg(),tileSVG);
+});
+
+test('リセットではタルキックの表示設定を保ち、距離を空欄へ戻す',t=>{
+  for(const display of [true,false]){
+    const a=keraba(t);a.change('tarukickA','140');a.change('dTarukick',display);
+    a.get('btnReset').click();a.get('projectResetConfirm').click();
+    assert.equal(a.get('tarukickA').value,'');assert.equal(a.get('dTarukick').checked,display);
+    assert.match(a.get('sheet').textContent,/必要な寸法/);
+    assert.equal(a.get('sheet').querySelector('[aria-label="タルキックⅡ選定結果"]'),null);
+    assert.ok(!a.get('tarukickStatus').textContent.match(/TK[56]-/));
+  }
+});
+
 test('上部・下部・上下カットの形と寸法線は実際の辺に一致する', t => {
   const a=keraba(t), near=(actual,expected)=>assert.ok(Math.abs(actual-expected)<1e-8,`${actual} != ${expected}`);
   for(const roofMode of ['normal','tile']) for(const mode of ['cut1','cutBottom','cut2']){

@@ -320,6 +320,15 @@
       </fieldset>
 
       <fieldset>
+        <legend>タルキックⅡ</legend>
+        <label class="chk"><input type="checkbox" id="dTarukick" checked>図面の下に表示</label>
+        <div class="row"><label for="tarukickA">桁外面～垂木先端</label><input type="number" id="tarukickA" min="0" step="1" placeholder="不明なら空欄" aria-describedby="tarukickAHint"><span class="unit">mm</span></div>
+        <p id="tarukickAHint" class="hint">垂木から直接打つ条件で選定します。距離は水平（公式表のA寸法）。空欄では条件付きの参考品番を表示します。</p>
+        <p id="tarukickStatus" class="hint" role="status" aria-live="polite"></p>
+        <p class="hint"><a href="https://www.synegic.co.jp/product/tk/size/" target="_blank" rel="noopener noreferrer">メーカー公式の選定表</a></p>
+      </fieldset>
+
+      <fieldset>
         <legend>表示・寸法線</legend>
         <div class="boxgrp"><b>鼻隠し</b><div class="chkgrid">
           <label class="chk"><input type="checkbox" id="dHana" checked>鼻隠し寸法</label>
@@ -457,6 +466,7 @@ const FIELDS = {
   dHana:'bool', dThick:'bool', dMoya:'bool', dShort:'bool', dClear:'bool', dHatch:'bool',
   d225:'bool', dMoyaW:'bool', dCenter:'bool',
   dHafuW:'bool', dTaruki:'bool', dNoji:'bool', dOverS:'bool', dOverK:'bool', dSlope:'bool',
+  dTarukick:'bool', tarukickA:'num',
   orient:'text', fscale:'num', lscale:'num', note:'text',
   ordHafu:'text',
   ordHafuSp:'text', ordHafuLen:'text', ordHafuQty:'text',
@@ -479,6 +489,7 @@ const DEFAULTS = {
   dHana:true, dThick:true, dMoya:true, dShort:true, dClear:true, dHatch:true,
   d225:true, dMoyaW:true, dCenter:true,
   dHafuW:true, dTaruki:true, dNoji:true, dOverS:true, dOverK:true, dSlope:true,
+  dTarukick:true, tarukickA:null,
   orient:'landscape', fscale:1, lscale:1, note:'',
   ordHafu:'p3',
   ordHafuSp:'', ordHafuLen:'', ordHafuQty:'',
@@ -602,6 +613,10 @@ function parseProjectDocument(text){
   // 種類追加前の保存データは、従来の母屋芯基準として開く。元データは変更しない。
   const storedInputs={...doc.inputs};
   if(!Object.prototype.hasOwnProperty.call(storedInputs,'notchType')) storedInputs.notchType='center';
+  // タルキック追加前の保存にも対応し、既存の入力・作図条件を引き継ぐ。
+  for(const key of ['dTarukick','tarukickA']){
+    if(!Object.prototype.hasOwnProperty.call(storedInputs,key)) storedInputs[key]=DEFAULTS[key];
+  }
   const fields=Object.keys(FIELDS).filter(key=>document.getElementById(key));
   if(Object.keys(storedInputs).some(key=>!fields.includes(key)) || fields.some(key=>!Object.prototype.hasOwnProperty.call(storedInputs,key)))
     throw new Error('保存ファイルの入力項目が一致しません。入力は変更していません。');
@@ -907,6 +922,31 @@ function fmt(v){
 }
 const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
+// 出典：シネジック公式「タルキックⅡ サイズ選定」（2026-11-19確認）。
+// 垂木から施工し、A寸法が140 mm以上のときだけ、この表でサイズを確定する。
+const TARUKICK_SIZES = [
+  [60,'TK5-105Ⅱ'], [75,'TK5-120Ⅱ'], [90,'TK5-135Ⅱ'], [105,'TK5-150Ⅱ'],
+  [120,'TK5-165Ⅱ'], [140,'TK6-185Ⅱ'], [155,'TK6-200Ⅱ']
+];
+function selectTarukick(p){
+  if(!p.dTarukick) return null;
+  const result=(status,label,detail,code=null)=>({status,label:'タルキックⅡ：'+label,detail,code});
+  if(!Number.isFinite(p.hTaruki) || p.hTaruki<=0)
+    return result('pending','垂木成を入力','垂木成を入力すると選定結果を表示します');
+  const a=p.tarukickA;
+  if(a!=null && (!Number.isFinite(a) || a<0 || a>Number.MAX_SAFE_INTEGER))
+    return result('pending','距離を確認','桁外面～垂木先端の水平距離を0 mm以上で入力してください');
+  if(a!=null && a<140)
+    return result('check','メーカー確認','A寸法140 mm未満のため、打ち込み位置とサイズの確認が必要です');
+  const size=TARUKICK_SIZES.find(([height])=>p.hTaruki<=height);
+  if(!size) return result('check','メーカー確認','垂木成155 mmを超えるため、公式選定表の範囲外です');
+  // 境界の直前・直後を同じ数値に丸めず、選定に使用した入力値を示す。
+  const height=String(p.hTaruki);
+  if(a==null) return result('reference',size[1]+'（参考）',
+    `垂木成 ${height} mm／垂木から施工・A寸法140 mm以上の場合`,size[1]);
+  return result('selected',size[1],`垂木成 ${height} mm／A寸法 ${String(a)} mm・垂木から施工`,size[1]);
+}
+
 /* 多角形を「ライン(x)より下」で切り取る（ケラバカットの落とし部） */
 function clipBelow(poly, lineFn){
   const f = pt => pt[1] - lineFn(pt[0]);
@@ -957,8 +997,11 @@ function buildContent(p, g){
     if(okK) noteLines.push(`${okS?'水上':''}鼻隠し：${fmt(g.tHana)}ｘ${fmt(g.hHanaOrderK)}`);
   }
   if(g.notchType==='techno') noteLines.push('垂木欠き：テクノ（鉛直10 mm）');
+  const tarukick=selectTarukick(p);
+  const F_TK=7*FS, F_TK_NOTE=4.5*FS;
+  const tarukickBand=tarukick ? F_TK*1.35+3 : 0;
   const noteStep = F_NOTE*1.35;
-  const yNote2 = SH - 9;
+  const yNote2 = SH - 9 - tarukickBand;
   const footT  = yNote2 - (noteLines.length-1)*noteStep - F_NOTE - 5;
 
   const OFF  = F_DIM*1.35;         // 寸法線の逃げ量（文字サイズに追従）
@@ -1342,6 +1385,17 @@ function buildContent(p, g){
 
   if(p.client) text(SW-11, yNote2, p.client, F_SML, 'end');
 
+  // 図面の最下段に専用の帯を確保する。発注書の行・図には追加しない。
+  if(tarukick){
+    const labelWidth=textWidth(tarukick.label,F_TK), detailWidth=textWidth(tarukick.detail,F_TK_NOTE);
+    const fullWidth=labelWidth+4+detailWidth, fit=Math.min(1,(SW-22)/fullWidth);
+    const left=(SW-fullWidth*fit)/2;
+    o.push(`<g aria-label="タルキックⅡ選定結果" data-status="${tarukick.status}">`);
+    text(left, SH-9, tarukick.label, F_TK*fit, 'start', 0, 700);
+    text(left+(labelWidth+4)*fit, SH-9, tarukick.detail, F_TK_NOTE*fit, 'start');
+    o.push('</g>');
+  }
+
   return o.join('\n');
 }
 
@@ -1544,6 +1598,9 @@ function updateEnabled(p){
   off('tileHafuWidth', noHafu);
   off('tileHafuHeight', noHafu);
   off('clearance', noHafu);          // 破風板が無ければケラバカットも無い
+  off('tarukickA', !p.dTarukick);
+  const tarukick=selectTarukick(p);
+  $('tarukickStatus').textContent=tarukick ? tarukick.label+'。'+tarukick.detail : '図面には表示しません。';
 
   if(p.roofMode==='tile'){
     [['hafu', noHafu], ['hanaShimo', p.hanaShimo==='none'], ['hanaKami', p.hanaKami==='none']].forEach(([part, disabled])=>{
