@@ -1083,7 +1083,7 @@ function buildContent(p, g){
   if(g.notchType==='techno') noteLines.push('垂木欠き：テクノ（鉛直10 mm）');
   const tarukick=selectTarukick(p);
   const screw=tarukickScrewGeometry(p,g,tarukick);
-  const showTarukickLabel=p.dTarukick && tarukick;
+  const showTarukickLabel=p.dTarukick && ['present','none'].includes(p.tarukickEaves) && tarukick;
   const F_TK=7*FS;
   const tarukickBand=showTarukickLabel ? F_TK*1.35+3 : 0;
   const noteStep = F_NOTE*1.35;
@@ -1684,9 +1684,14 @@ function updateEnabled(p){
   off('tileHafuWidth', noHafu);
   off('tileHafuHeight', noHafu);
   off('clearance', noHafu);          // 破風板が無ければケラバカットも無い
-  off('tarukickEaves', !p.dTarukick && !p.dTarukickScrew);
+  const hasTarukickEaves=['present','none'].includes(p.tarukickEaves);
+  off('tarukickEaves',false);
+  off('dTarukick',!hasTarukickEaves);
+  off('dTarukickScrew',!hasTarukickEaves);
+  $('tarukickEaves').dataset.previousValue=p.tarukickEaves;
   const tarukick=selectTarukick(p);
-  $('tarukickStatus').textContent=tarukick ? tarukick.label+'。'+tarukick.detail : '図面には表示しません。';
+  $('tarukickStatus').textContent=!hasTarukickEaves ? '軒あり・軒なしを選ぶと図面に表示します。'
+    : tarukick ? tarukick.label+'。'+tarukick.detail : '図面には表示しません。';
   $('tarukickSource').href=TARUKICK_TABLES[p.tarukickEaves]?.source || 'https://www.synegic.co.jp/product/tk/size/';
 
   if(p.roofMode==='tile'){
@@ -1916,8 +1921,19 @@ $('form').addEventListener('input', e=>{
   }
 });
 
-$('form').addEventListener('input', ()=>{ $('ackWarning').checked=false; refresh(); });
-$('form').addEventListener('change', ()=>{ $('ackWarning').checked=false; refresh(); });
+function onFormChange(e){
+  const el=e.target;
+  // 未選択から軒を選んだときに表示を開始する。選択後の手動OFFは保持する。
+  if(el.id==='tarukickEaves' && !['present','none'].includes(el.dataset.previousValue)
+    && ['present','none'].includes(el.value)){
+    $('dTarukick').checked=true;
+    $('dTarukickScrew').checked=true;
+  }
+  $('ackWarning').checked=false;
+  refresh();
+}
+$('form').addEventListener('input', onFormChange);
+$('form').addEventListener('change', onFormChange);
 $('ackWarning').addEventListener('change', refresh);
 $('zoom').addEventListener('change', applyZoom);
 window.addEventListener('resize', applyZoom);
