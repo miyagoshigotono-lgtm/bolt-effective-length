@@ -84,14 +84,14 @@ function keraba(t, { blocked = false, fetcher, owner = 'a'.repeat(64), hash = ''
 }
 
 test('タルキックは公式表の上限を含めて選び、次のサイズへの境界を丸めない',t=>{
-  const a=keraba(t),p=Object.assign(a.w.getParams(),{dTarukick:true,tarukickA:140});
+  const a=keraba(t),p=Object.assign(a.w.getParams(),{dTarukick:true,tarukickEaves:'present'});
   const pairs=[[60,'TK5-105Ⅱ'],[75,'TK5-120Ⅱ'],[90,'TK5-135Ⅱ'],[105,'TK5-150Ⅱ'],
     [120,'TK5-165Ⅱ'],[140,'TK6-185Ⅱ'],[155,'TK6-200Ⅱ']];
   for(let i=0;i<pairs.length;i++){
     const [height,code]=pairs[i];
     for(const hTaruki of [height-0.001,height]){
       const result=a.w.selectTarukick({...p,hTaruki});
-      assert.equal(result.status,'selected');assert.equal(result.code,code);
+      assert.equal(result.status,'reference');assert.equal(result.code,code);
       assert.ok(result.detail.includes(String(hTaruki)+' mm'));
     }
     const result=a.w.selectTarukick({...p,hTaruki:height+0.001});
@@ -103,40 +103,42 @@ test('タルキックは公式表の上限を含めて選び、次のサイズ�
   }
 });
 
-test('A寸法は空欄なら条件付き、140 mm未満なら未確定とし、図のスケールから推定しない',t=>{
+test('軒ありは参考品番、軒なしはメーカー確認とし、図のスケールから軒の出を推定しない',t=>{
   const a=keraba(t),p=Object.assign(a.w.getParams(),{dTarukick:true,hTaruki:90});
-  const reference=a.w.selectTarukick({...p,tarukickA:null});
+  const reference=a.w.selectTarukick({...p,tarukickEaves:'present'});
   assert.equal(reference.status,'reference');assert.equal(reference.code,'TK5-135Ⅱ');
-  assert.match(reference.label,/参考/);assert.match(reference.detail,/140 mm以上/);
-  for(const tarukickA of [0,139,139.999999]){
-    const result=a.w.selectTarukick({...p,tarukickA});assert.equal(result.status,'check');assert.equal(result.code,null);
-    assert.match(result.label,/メーカー確認/);
-  }
-  for(const tarukickA of [-0.01,Infinity,NaN,Number.MAX_SAFE_INTEGER+1]){
-    const result=a.w.selectTarukick({...p,tarukickA});assert.equal(result.status,'pending');assert.equal(result.code,null);
+  assert.match(reference.label,/参考/);assert.match(reference.detail,/水平140 mm以上/);assert.match(reference.detail,/140 mm未満/);
+  const noEaves=a.w.selectTarukick({...p,tarukickEaves:'none'});
+  assert.equal(noEaves.status,'check');assert.equal(noEaves.code,null);assert.match(noEaves.label,/メーカー確認/);
+  for(const tarukickEaves of ['',null,'unknown']){
+    const result=a.w.selectTarukick({...p,tarukickEaves});assert.equal(result.status,'pending');assert.equal(result.code,null);
   }
   for(const pitch of [1,4,12])for(const notchType of ['center','techno'])for(const total of [300,1000]){
-    const result=a.w.selectTarukick({...p,tarukickA:140,pitch,notchType,total});
-    assert.equal(result.code,'TK5-135Ⅱ');assert.equal(result.status,'selected');
-    assert.equal(a.w.selectTarukick({...p,tarukickA:null,pitch,notchType,total}).status,'reference');
+    const result=a.w.selectTarukick({...p,tarukickEaves:'present',pitch,notchType,total});
+    assert.equal(result.code,'TK5-135Ⅱ');assert.equal(result.status,'reference');
+    assert.equal(a.w.selectTarukick({...p,tarukickEaves:'',pitch,notchType,total}).status,'pending');
   }
 });
 
-test('タルキックを図面の最下段へ反映し、表示切替・距離・垂木成の変更で更新する',t=>{
+test('軒のプルダウンを反映し、図面最下段は品番だけを表示して説明は入力側に置く',t=>{
   const a=keraba(t),group=()=>a.get('sheet').querySelector('[aria-label="タルキックⅡ選定結果"]');
-  assert.equal(group().getAttribute('data-status'),'reference');
-  a.change('tarukickA','140');a.change('hTaruki','75.001');
-  assert.equal(group().getAttribute('data-status'),'selected');assert.match(group().textContent,/TK5-135Ⅱ/);
+  assert.equal(a.get('tarukickA'),null);assert.equal(a.get('tarukickEaves').tagName,'SELECT');
+  assert.deepEqual([...a.get('tarukickEaves').options].map(option=>option.textContent),['未選択','軒あり','軒なし']);
+  assert.match(a.get('tarukickEavesHint').textContent,/30 mm以上.*軒あり.*30 mm未満.*軒なし/);
+  assert.equal(group().getAttribute('data-status'),'pending');
+  a.change('tarukickEaves','present');a.change('hTaruki','75.001');
+  assert.equal(group().getAttribute('data-status'),'reference');assert.match(group().textContent,/TK5-135Ⅱ/);
   const texts=[...group().querySelectorAll('text')];
-  assert.ok(Number(texts[0].getAttribute('y'))>180);assert.equal(Number(texts[1].getAttribute('y')),201);
+  assert.equal(texts.length,1);assert.equal(Number(texts[0].getAttribute('y')),201);
+  assert.ok(!group().textContent.match(/垂木成|A寸法|から施工|140 mm|30 mm/));
   assert.equal(group().parentElement.lastElementChild,group());
-  assert.match(a.get('tarukickStatus').textContent,/TK5-135Ⅱ/);
-  a.change('tarukickA','139.999');assert.equal(group().getAttribute('data-status'),'check');
+  assert.match(a.get('tarukickStatus').textContent,/TK5-135Ⅱ.*垂木成 75.001 mm.*軒あり/);
+  a.change('tarukickEaves','none');assert.equal(group().getAttribute('data-status'),'check');
   assert.ok(!group().textContent.includes('TK5-135Ⅱ'));assert.equal(a.get('btnPrintDwg').disabled,false);
-  a.change('dTarukick',false);assert.equal(group(),null);assert.equal(a.get('tarukickA').disabled,true);
-  assert.equal(a.get('tarukickA').value,'139.999');
+  a.change('dTarukick',false);assert.equal(group(),null);assert.equal(a.get('tarukickEaves').disabled,true);
+  assert.equal(a.get('tarukickEaves').value,'none');
   a.change('dTarukick',true);assert.equal(group().getAttribute('data-status'),'check');
-  assert.equal(a.get('tarukickA').disabled,false);
+  assert.equal(a.get('tarukickEaves').disabled,false);
 });
 
 test('タルキックの有無と条件は注文書の図・寸法・行を一切変えない',t=>{
@@ -144,8 +146,8 @@ test('タルキックの有無と条件は注文書の図・寸法・行を一�
   for(const roofMode of ['normal','tile']){
     if(roofMode==='tile')a.get('tabTile').click();
     const order=a.get('sheetOrd').innerHTML;
-    for(const tarukickA of ['','140','139','-1']){
-      a.change('tarukickA',tarukickA);assert.equal(a.get('sheetOrd').innerHTML,order);
+    for(const tarukickEaves of ['present','none','']){
+      a.change('tarukickEaves',tarukickEaves);assert.equal(a.get('sheetOrd').innerHTML,order);
     }
     a.change('dTarukick',false);assert.equal(a.get('sheetOrd').innerHTML,order);
     assert.ok(!order.includes('タルキック'));
@@ -153,28 +155,36 @@ test('タルキックの有無と条件は注文書の図・寸法・行を一�
   }
 });
 
-test('タルキック追加前のJSONと端末保存を読み、元データを変えず新しい表示条件を補う',t=>{
-  const a=keraba(t),doc=a.doc();delete doc.inputs.dTarukick;delete doc.inputs.tarukickA;
+test('以前の水平距離を30 mmで軒あり・軒なしへ移し、不明は未選択として保存を読む',t=>{
+  const a=keraba(t),doc=a.doc();delete doc.inputs.dTarukick;delete doc.inputs.tarukickEaves;
   const original=JSON.stringify(doc),p=a.w.parseProjectDocument(original);
-  assert.equal(p.inputs.dTarukick,true);assert.equal(p.inputs.tarukickA,null);assert.equal(JSON.stringify(doc),original);
+  assert.equal(p.inputs.dTarukick,true);assert.equal(p.inputs.tarukickEaves,'');assert.equal(JSON.stringify(doc),original);
   const b=keraba(t,{saved:{normal:doc.inputs}});assert.equal(b.get('dTarukick').checked,true);
   assert.match(b.get('sheet').textContent,/タルキックⅡ/);
-  b.open(doc);assert.equal(b.get('tarukickA').value,'');
-  for(const inputs of [{...p.inputs,dTarukick:'true'},{...p.inputs,tarukickA:'140'}])
+  b.open(doc);assert.equal(b.get('tarukickEaves').value,'');
+  for(const [tarukickA,expected]of [[null,''],[-1,''],[0,'none'],[29.999999,'none'],[30,'present'],[139.999,'present'],[140,'present'],[455,'present']]){
+    const legacy={...doc,inputs:{...doc.inputs,tarukickA}},before=JSON.stringify(legacy);
+    const migrated=a.w.parseProjectDocument(before);
+    assert.equal(migrated.inputs.tarukickEaves,expected);
+    assert.equal(Object.hasOwn(migrated.inputs,'tarukickA'),false);assert.equal(JSON.stringify(legacy),before);
+    const loaded=keraba(t,{saved:{normal:legacy.inputs}});assert.equal(loaded.get('tarukickEaves').value,expected);
+    b.open(legacy);assert.equal(b.get('tarukickEaves').value,expected);
+  }
+  for(const inputs of [{...p.inputs,dTarukick:'true'},{...p.inputs,tarukickEaves:'unknown'},{...p.inputs,tarukickEaves:true},{...doc.inputs,tarukickA:'455'}])
     assert.throws(()=>a.open({...doc,inputs}));
   const missing={...doc.inputs};delete missing.pitch;assert.throws(()=>a.open({...doc,inputs:missing}));
 });
 
-test('通常と瓦でタルキックの表示と距離を独立して保存し、クラウドから再現できる',async t=>{
+test('通常と瓦でタルキックの表示と軒の選択を独立して保存し、クラウドから再現できる',async t=>{
   const remote=cloud(),a=keraba(t,{fetcher:remote.fetcher});
-  a.change('tarukickA','200');a.change('dTarukick',false);
+  a.change('tarukickEaves','none');a.change('dTarukick',false);
   const normal=a.doc();
-  a.get('tabTile').click();assert.equal(a.get('dTarukick').checked,true);assert.equal(a.get('tarukickA').value,'');
-  a.change('tarukickA','140');a.change('hTaruki','90');
+  a.get('tabTile').click();assert.equal(a.get('dTarukick').checked,true);assert.equal(a.get('tarukickEaves').value,'');
+  a.change('tarukickEaves','present');a.change('hTaruki','90');
   const tile=a.doc(),tileSVG=a.svg();
   a.get('btnSaveProject').click();a.get('projectSaveName').value='ビス表示確認';await submit(a,'projectSaveForm');
   const restored=keraba(t,{fetcher:remote.fetcher});await openCloud(restored,'ビス表示確認');
-  assert.equal(restored.get('tarukickA').value,'140');assert.equal(restored.get('dTarukick').checked,true);
+  assert.equal(restored.get('tarukickEaves').value,'present');assert.equal(restored.get('dTarukick').checked,true);
   assert.deepEqual(restored.svg(),tileSVG);
   a.get('tabNormal').click();assert.deepEqual(a.doc().inputs,normal.inputs);
   a.get('tabTile').click();assert.deepEqual(a.doc().inputs,tile.inputs);
@@ -182,11 +192,24 @@ test('通常と瓦でタルキックの表示と距離を独立して保存し�
   imported.open(tile);assert.deepEqual(imported.svg(),tileSVG);
 });
 
-test('リセットではタルキックの表示設定を保ち、距離を空欄へ戻す',t=>{
+test('クラウドの旧距離データも軒の選択へ引き継ぎ、読み込みだけで保存元を書き換えない',async t=>{
+  const remote=cloud(),a=keraba(t),legacy=a.doc();
+  delete legacy.inputs.tarukickEaves;legacy.inputs.tarukickA=455;
+  remote.put('軒の移行確認',legacy);
+  const before=remote.file('軒の移行確認').text;
+  const loaded=keraba(t,{fetcher:remote.fetcher});await openCloud(loaded,'軒の移行確認');
+  assert.equal(loaded.get('tarukickEaves').value,'present');
+  assert.equal(Object.hasOwn(loaded.doc().inputs,'tarukickA'),false);
+  assert.equal(remote.file('軒の移行確認').text,before);
+  const group=loaded.get('sheet').querySelector('g[data-status]');
+  assert.equal(group.querySelectorAll('text').length,1);assert.ok(!group.textContent.includes('455'));
+});
+
+test('リセットではタルキックの表示設定を保ち、軒の選択を未選択へ戻す',t=>{
   for(const display of [true,false]){
-    const a=keraba(t);a.change('tarukickA','140');a.change('dTarukick',display);
+    const a=keraba(t);a.change('tarukickEaves','present');a.change('dTarukick',display);
     a.get('btnReset').click();a.get('projectResetConfirm').click();
-    assert.equal(a.get('tarukickA').value,'');assert.equal(a.get('dTarukick').checked,display);
+    assert.equal(a.get('tarukickEaves').value,'');assert.equal(a.get('dTarukick').checked,display);
     assert.match(a.get('sheet').textContent,/必要な寸法/);
     assert.equal(a.get('sheet').querySelector('[aria-label="タルキックⅡ選定結果"]'),null);
     assert.ok(!a.get('tarukickStatus').textContent.match(/TK[56]-/));
