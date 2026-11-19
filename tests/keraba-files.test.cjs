@@ -83,41 +83,74 @@ function keraba(t, { blocked = false, fetcher, owner = 'a'.repeat(64), hash = ''
   };
 }
 
-test('タルキックは公式表の上限を含めて選び、次のサイズへの境界を丸めない',t=>{
-  const a=keraba(t),p=Object.assign(a.w.getParams(),{dTarukick:true,tarukickEaves:'present'});
-  const pairs=[[60,'TK5-105Ⅱ'],[75,'TK5-120Ⅱ'],[90,'TK5-135Ⅱ'],[105,'TK5-150Ⅱ'],
-    [120,'TK5-165Ⅱ'],[140,'TK6-185Ⅱ'],[155,'TK6-200Ⅱ']];
-  for(let i=0;i<pairs.length;i++){
-    const [height,code]=pairs[i];
-    for(const hTaruki of [height-0.001,height]){
-      const result=a.w.selectTarukick({...p,hTaruki});
-      assert.equal(result.status,'reference');assert.equal(result.code,code);
-      assert.ok(result.detail.includes(String(hTaruki)+' mm'));
+test('タルキックⅡの画像条件表2枚・全378セルを、適用外の欄まで照合する',t=>{
+  const a=keraba(t),p={...a.w.getParams(),dTarukick:true};
+  // 公式画像01（A30 mm）・03（A0 mm）を左から0～10寸、0.5寸刻みで転記した照合値。
+  // タルキックSの画像02・04とは区別する。ハイフンは元表の「適用外」。
+  const expected={present:{
+    45:'105 105 105 105 105 105 105 105 105 105 105 105 105 105 105 105 120 120 120 120 120',
+    55:'105 105 105 105 105 105 105 105 120 120 120 120 120 120 120 135 135 135 135 135 150',
+    60:'105 105 105 105 120 120 120 120 120 120 120 120 120 135 135 135 135 150 150 150 150',
+    75:'120 120 120 135 135 135 135 135 135 135 135 135 150 150 165 165 165 165 - - -',
+    90:'135 135 135 150 150 150 150 150 150 150 150 165 165 165 165 185 185 - - - -',
+    105:'150 150 165 165 165 165 165 165 165 185 185 185 185 200 200 - - - - - -',
+    120:'165 165 185 185 185 185 185 185 185 200 200 200 - - - - - - - - -',
+    140:'185 185 200 200 200 200 200 200 - - - - - - - - - - - - -',
+    150:'200 200 200 200 - - - - - - - - - - - - - - - - -'
+  },none:{
+    45:'105 105 105 105 105 105 105 105 120 120 120 120 120 135 135 135 - - - - -',
+    55:'105 105 105 105 120 120 120 120 120 135 135 135 135 150 150 - - - - - -',
+    60:'105 120 120 120 120 120 120 135 135 135 135 150 150 150 - - - - - - -',
+    75:'120 135 135 135 135 135 135 150 150 150 165 165 165 - - - - - - - -',
+    90:'135 150 150 150 150 150 150 165 165 165 185 - - - - - - - - - -',
+    105:'150 165 165 165 165 165 185 185 185 185 - - - - - - - - - - -',
+    120:'165 185 185 185 185 185 185 200 200 200 - - - - - - - - - - -',
+    140:'185 200 200 200 200 200 - - - - - - - - - - - - - - -',
+    150:'200 200 200 - - - - - - - - - - - - - - - - - -'
+  }};
+  let cells=0;
+  for(const [tarukickEaves,rows]of Object.entries(expected))for(const [height,row]of Object.entries(rows)){
+    const values=row.split(' ');assert.equal(values.length,21);
+    for(const [index,value]of values.entries()){
+      const result=a.w.selectTarukick({...p,tarukickEaves,hTaruki:Number(height),pitch:index/2});
+      const context=tarukickEaves+'/'+height+'/'+index/2;
+      const code=value==='-'?null:(Number(value)<=165?'TK5-':'TK6-')+value+'Ⅱ';
+      assert.equal(result.code,code,context);
+      assert.equal(result.status,value==='-'?'check':'reference',context);
+      if(value==='-')assert.match(result.label,/適用外/);
+      cells++;
     }
-    const result=a.w.selectTarukick({...p,hTaruki:height+0.001});
-    assert.equal(result.code,i<pairs.length-1?pairs[i+1][1]:null);
-    if(i===pairs.length-1){assert.equal(result.status,'check');assert.match(result.detail,/範囲外/);}
   }
+  assert.equal(cells,378);
+});
+
+test('提示条件の60 mm・1寸・軒なしは120を参照し、表の前提を入力側へ明示する',t=>{
+  const a=keraba(t),p={...a.w.getParams(),dTarukick:true,hTaruki:60,pitch:1,moyaSize:105,notchRef:22.5};
+  for(const notchType of ['center','techno'])for(const roofMode of ['normal','tile'])for(const total of [300,1000]){
+    const result=a.w.selectTarukick({...p,notchType,roofMode,total,tarukickEaves:'none'});
+    assert.equal(result.status,'reference');assert.equal(result.code,'TK5-120Ⅱ');
+    assert.match(result.detail,/A寸法0 mm.*欠きなし.*縁端20 mm/);assert.match(result.detail,/欠き込みの補正はしていません/);
+    assert.equal(a.w.selectTarukick({...p,notchType,roofMode,total,tarukickEaves:'present'}).code,'TK5-105Ⅱ');
+  }
+  const highPitch=a.w.selectTarukick({...p,pitch:4,tarukickEaves:'none'});
+  assert.equal(highPitch.code,'TK5-135Ⅱ');
+  assert.equal(a.w.selectTarukick({...p,pitch:4,tarukickEaves:'present'}).code,'TK5-120Ⅱ');
+});
+
+test('条件表にない中間値や範囲外を丸めず、未入力・適用外を品番と区別する',t=>{
+  const a=keraba(t),p={...a.w.getParams(),dTarukick:true,tarukickEaves:'none',hTaruki:60,pitch:1};
   for(const hTaruki of [null,0,-1,NaN,Infinity]){
     const result=a.w.selectTarukick({...p,hTaruki});assert.equal(result.status,'pending');assert.equal(result.code,null);
   }
-});
-
-test('軒ありは参考品番、軒なしはメーカー確認とし、図のスケールから軒の出を推定しない',t=>{
-  const a=keraba(t),p=Object.assign(a.w.getParams(),{dTarukick:true,hTaruki:90});
-  const reference=a.w.selectTarukick({...p,tarukickEaves:'present'});
-  assert.equal(reference.status,'reference');assert.equal(reference.code,'TK5-135Ⅱ');
-  assert.match(reference.label,/参考/);assert.match(reference.detail,/水平140 mm以上/);assert.match(reference.detail,/140 mm未満/);
-  const noEaves=a.w.selectTarukick({...p,tarukickEaves:'none'});
-  assert.equal(noEaves.status,'check');assert.equal(noEaves.code,null);assert.match(noEaves.label,/メーカー確認/);
-  for(const tarukickEaves of ['',null,'unknown']){
-    const result=a.w.selectTarukick({...p,tarukickEaves});assert.equal(result.status,'pending');assert.equal(result.code,null);
+  for(const tarukickEaves of ['',null,'unknown'])assert.equal(a.w.selectTarukick({...p,tarukickEaves}).status,'pending');
+  for(const pitch of [null,-1,NaN,Infinity])assert.equal(a.w.selectTarukick({...p,pitch}).status,'pending');
+  for(const change of [{hTaruki:60.00001},{hTaruki:44},{hTaruki:155},{pitch:1.33},{pitch:0.500000001},{pitch:10.00001}]){
+    const result=a.w.selectTarukick({...p,...change});assert.equal(result.code,null);assert.equal(result.status,'check');
+    assert.match(result.detail,/記載がありません/);
   }
-  for(const pitch of [1,4,12])for(const notchType of ['center','techno'])for(const total of [300,1000]){
-    const result=a.w.selectTarukick({...p,tarukickEaves:'present',pitch,notchType,total});
-    assert.equal(result.code,'TK5-135Ⅱ');assert.equal(result.status,'reference');
-    assert.equal(a.w.selectTarukick({...p,tarukickEaves:'',pitch,notchType,total}).status,'pending');
-  }
+  const outside=a.w.selectTarukick({...p,pitch:7});assert.equal(outside.code,null);assert.match(outside.label,/適用外/);
+  assert.equal(a.w.selectTarukick({...p,pitch:6.5}).code,'TK5-150Ⅱ');
+  assert.equal(a.w.selectTarukick({...p,dTarukick:false}),null);
 });
 
 test('軒のプルダウンを反映し、図面最下段は品番だけを表示して説明は入力側に置く',t=>{
@@ -126,19 +159,24 @@ test('軒のプルダウンを反映し、図面最下段は品番だけを表�
   assert.deepEqual([...a.get('tarukickEaves').options].map(option=>option.textContent),['未選択','軒あり','軒なし']);
   assert.match(a.get('tarukickEavesHint').textContent,/30 mm以上.*軒あり.*30 mm未満.*軒なし/);
   assert.equal(group().getAttribute('data-status'),'pending');
-  a.change('tarukickEaves','present');a.change('hTaruki','75.001');
-  assert.equal(group().getAttribute('data-status'),'reference');assert.match(group().textContent,/TK5-135Ⅱ/);
+  a.change('tarukickEaves','present');a.change('hTaruki','60');a.change('pitch','1');
+  assert.equal(group().getAttribute('data-status'),'reference');assert.match(group().textContent,/TK5-105Ⅱ/);
   const texts=[...group().querySelectorAll('text')];
   assert.equal(texts.length,1);assert.equal(Number(texts[0].getAttribute('y')),201);
   assert.ok(!group().textContent.match(/垂木成|A寸法|から施工|140 mm|30 mm/));
   assert.equal(group().parentElement.lastElementChild,group());
-  assert.match(a.get('tarukickStatus').textContent,/TK5-135Ⅱ.*垂木成 75.001 mm.*軒あり/);
-  a.change('tarukickEaves','none');assert.equal(group().getAttribute('data-status'),'check');
-  assert.ok(!group().textContent.includes('TK5-135Ⅱ'));assert.equal(a.get('btnPrintDwg').disabled,false);
+  assert.match(a.get('tarukickStatus').textContent,/TK5-105Ⅱ.*垂木成 60 mm.*軒あり/);
+  assert.ok(a.get('tarukickSource').href.endsWith('/tk-size-gr-01-md.jpg'));
+  a.change('tarukickEaves','none');assert.equal(group().getAttribute('data-status'),'reference');
+  assert.match(group().textContent,/TK5-120Ⅱ/);assert.equal(a.get('btnPrintDwg').disabled,false);
+  assert.ok(a.get('tarukickSource').href.endsWith('/tk-size-gr-03-md.jpg'));
   a.change('dTarukick',false);assert.equal(group(),null);assert.equal(a.get('tarukickEaves').disabled,true);
   assert.equal(a.get('tarukickEaves').value,'none');
-  a.change('dTarukick',true);assert.equal(group().getAttribute('data-status'),'check');
+  a.change('dTarukick',true);assert.equal(group().getAttribute('data-status'),'reference');
   assert.equal(a.get('tarukickEaves').disabled,false);
+  a.change('pitch','4');assert.match(group().textContent,/TK5-135Ⅱ/);
+  a.change('hTaruki','75');assert.match(group().textContent,/TK5-150Ⅱ/);
+  a.change('pitch','7');assert.match(group().textContent,/適用外/);
 });
 
 test('タルキックの有無と条件は注文書の図・寸法・行を一切変えない',t=>{

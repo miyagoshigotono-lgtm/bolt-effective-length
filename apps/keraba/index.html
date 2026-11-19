@@ -325,7 +325,7 @@
         <div class="row"><label for="tarukickEaves">軒の出</label><select id="tarukickEaves" aria-describedby="tarukickEavesHint"><option value="present">軒あり</option><option value="none">軒なし</option></select></div>
         <p id="tarukickEavesHint" class="hint">軒の出30 mm以上は「軒あり」、30 mm未満は「軒なし」を選択します。</p>
         <p id="tarukickStatus" class="hint" role="status" aria-live="polite"></p>
-        <p class="hint"><a href="https://www.synegic.co.jp/product/tk/size/" target="_blank" rel="noopener noreferrer">メーカー公式の選定表</a></p>
+        <p class="hint"><a id="tarukickSource" href="https://www.synegic.co.jp/product/tk/size/" target="_blank" rel="noopener noreferrer">メーカー公式の選定表</a></p>
       </fieldset>
 
       <fieldset>
@@ -937,12 +937,33 @@ function fmt(v){
 }
 const esc = s => String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-// 出典：シネジック公式「タルキックⅡ サイズ選定」（2026-11-19確認）。
-// 軒ありの区分は30 mm以上。公式表の140 mm以上を確認できないため品番は参考とする。
-const TARUKICK_SIZES = [
-  [60,'TK5-105Ⅱ'], [75,'TK5-120Ⅱ'], [90,'TK5-135Ⅱ'], [105,'TK5-150Ⅱ'],
-  [120,'TK5-165Ⅱ'], [140,'TK6-185Ⅱ'], [155,'TK6-200Ⅱ']
-];
+// 出典：シネジック公式の画像条件表（2026-11-19確認）。タルキックSの表は使わない。
+// 欠きなし・ビス縁端距離20 mm。各行は[その長さが続く最終勾配, 長さ]で記録する。
+// 元表は0～10寸を0.5寸刻みで掲載。最後の勾配を超える欄は「適用外」。
+const TARUKICK_TABLES = {
+  present:{a:30,source:'https://cdn.synegic.co.jp/wp-content/uploads/2021/04/tk-size-gr-01-md.jpg',rows:{
+    45:[[7.5,105],[10,120]],
+    55:[[3.5,105],[7,120],[9.5,135],[10,150]],
+    60:[[1.5,105],[6,120],[8,135],[10,150]],
+    75:[[1,120],[5.5,135],[6.5,150],[8.5,165]],
+    90:[[1,135],[5,150],[7,165],[8,185]],
+    105:[[0.5,150],[4,165],[6,185],[7,200]],
+    120:[[0.5,165],[4,185],[5.5,200]],
+    140:[[0.5,185],[3.5,200]],
+    150:[[1.5,200]]
+  }},
+  none:{a:0,source:'https://cdn.synegic.co.jp/wp-content/uploads/2021/04/tk-size-gr-03-md.jpg',rows:{
+    45:[[3.5,105],[6,120],[7.5,135]],
+    55:[[1.5,105],[4,120],[6,135],[7,150]],
+    60:[[0,105],[3,120],[5,135],[6.5,150]],
+    75:[[0,120],[3,135],[4.5,150],[6,165]],
+    90:[[0,135],[3,150],[4.5,165],[5,185]],
+    105:[[0,150],[2.5,165],[4.5,185]],
+    120:[[0,165],[3,185],[4.5,200]],
+    140:[[0,185],[2.5,200]],
+    150:[[1,200]]
+  }}
+};
 function selectTarukick(p){
   if(!p.dTarukick) return null;
   const result=(status,label,detail,code=null)=>({status,label:'タルキックⅡ：'+label,detail,code});
@@ -950,13 +971,18 @@ function selectTarukick(p){
     return result('pending','垂木成を入力','垂木成を入力すると選定結果を表示します');
   if(!['present','none'].includes(p.tarukickEaves))
     return result('pending','軒の出を選択','軒あり（30 mm以上）か軒なし（30 mm未満）を選択してください');
-  if(p.tarukickEaves==='none')
-    return result('check','メーカー確認',`垂木成 ${String(p.hTaruki)} mm／軒なし。勾配や欠き込みを含めてサイズの確認が必要です`);
-  const size=TARUKICK_SIZES.find(([height])=>p.hTaruki<=height);
-  if(!size) return result('check','メーカー確認','垂木成155 mmを超えるため、公式選定表の範囲外です');
-  // 境界の直前・直後を同じ数値に丸めず、選定に使用した入力値を示す。
-  return result('reference',size[1]+'（参考）',
-    `垂木成 ${String(p.hTaruki)} mm／軒あり。公式表は水平140 mm以上が条件です。140 mm未満はメーカー確認が必要です`,size[1]);
+  if(!Number.isFinite(p.pitch) || p.pitch<0)
+    return result('pending','屋根勾配を入力','屋根勾配を入力すると条件表を参照します');
+  const table=TARUKICK_TABLES[p.tarukickEaves],row=table.rows[p.hTaruki];
+  const condition=`垂木成 ${String(p.hTaruki)} mm／${String(p.pitch)}寸／${p.tarukickEaves==='none'?'軒なし':'軒あり'}`;
+  // 記載されていない寸法・中間勾配を丸めたり、表の空欄を外挿したりしない。
+  if(!row || p.pitch>10 || !Number.isInteger(p.pitch*2))
+    return result('check','メーカー確認',condition+'。この寸法・勾配は公式条件表に記載がありません');
+  const cell=row.find(([lastPitch])=>p.pitch<=lastPitch);
+  if(!cell) return result('check','適用外（要確認）',condition+'。公式条件表では適用外です');
+  const length=cell[1],code=(length<=165?'TK5-':'TK6-')+length+'Ⅱ';
+  return result('reference',code+'（参考）',
+    condition+`。A寸法${table.a} mm・欠きなし・ビス縁端20 mmの公式表の参考値です。欠き込みの補正はしていません`,code);
 }
 
 /* 多角形を「ライン(x)より下」で切り取る（ケラバカットの落とし部） */
@@ -1609,6 +1635,7 @@ function updateEnabled(p){
   off('tarukickEaves', !p.dTarukick);
   const tarukick=selectTarukick(p);
   $('tarukickStatus').textContent=tarukick ? tarukick.label+'。'+tarukick.detail : '図面には表示しません。';
+  $('tarukickSource').href=TARUKICK_TABLES[p.tarukickEaves]?.source || 'https://www.synegic.co.jp/product/tk/size/';
 
   if(p.roofMode==='tile'){
     [['hafu', noHafu], ['hanaShimo', p.hanaShimo==='none'], ['hanaKami', p.hanaKami==='none']].forEach(([part, disabled])=>{
