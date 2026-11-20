@@ -158,7 +158,7 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
     <div class="stage">
       <section class="sheet" aria-labelledby="result-title">
         <h2 id="result-title">垂木けびき線位置</h2>
-        <p id="result-condition" class="result-condition">標準｜桁角のけびき線から垂木先端まで</p>
+        <p id="result-condition" class="result-condition">標準｜垂木天端の先端から桁角の基準線まで</p>
         <div class="results" aria-live="polite" aria-atomic="true">
           <div class="result">
             <h3 class="title">タツ</h3>
@@ -191,9 +191,9 @@ const numberFields = ["keta","kobai","noki","taruki"];
 const savedFields = [...numberFields,"notchType"];
 const storageKey = "kebiki-line.input.v1";
 const notchTypes = {
-  standard:{label:'標準',offset:22.5,hint:'母屋芯から22.5 mm。けびき線の基準は桁角です。'},
-  centerNotch:{label:'芯欠き',offset:0,hint:'母屋芯から0 mm。けびき線の基準は桁角です。'},
-  techno:{label:'テクノ',hint:'母屋の水下側上角から、鉛直に10 mm欠きます。けびき線の基準は桁角です。'}
+  standard:{label:'標準',offset:22.5,hint:'母屋芯から22.5 mm。'},
+  centerNotch:{label:'芯欠き',offset:0,hint:'母屋芯から0 mm。'},
+  techno:{label:'テクノ',hint:'母屋の水下側上角から、鉛直に10 mm欠きます。'}
 };
 for (let v = 1; v <= 5; v += 0.5) {
   const o = document.createElement("option");
@@ -223,26 +223,28 @@ function calc() {
   get('notchType').setAttribute('aria-invalid', String(!validType));
   get('notchType').setAttribute('aria-describedby',validType?'notchType-error notch-hint':'notchType-error');
   get('notch-hint').hidden = !validType;
-  get('notch-hint').textContent = validType?notch.hint:'';
-  get('result-condition').textContent = (validType ? notch.label+'｜' : '')+'桁角のけびき線から垂木先端まで';
+  get('notch-hint').textContent = validType?notch.hint+'タツは鉛直線、カネは勾配に直角の線を使い、垂木天端で測ります。':'';
+  get('result-condition').textContent = (validType ? notch.label+'｜' : '')+'垂木天端の先端から桁角の基準線まで';
   get('kane').textContent = get('tatsu').textContent = '—';
   if (!complete || !validType) return;
   const keta = values.keta, C = values.kobai / 10, D = values.noki, T = values.taruki;
   const horiz = D - keta / 2;
-  // 標準は桁角の鉛直位置を基準にし、欠き深さを垂木方向へ加算しない。
-  const cornerDepth = notchType==='standard' ? 0 : notchType==='techno' ? 10 : (keta/2-notch.offset)*C;
   const slopeLength = Math.hypot(1,C);
-  // 軒先が桁角より内側の場合も、向きを保って補正してから距離にする。
-  const base = Math.abs(horiz*slopeLength+cornerDepth*(C/slopeLength));
-  const perpendicular = base - T * C;
-  if (!Number.isFinite(base) || !Number.isFinite(perpendicular)) {
+  // 桁角での欠き深さは鉛直距離。標準・芯欠きの位置は水平距離から求める。
+  const cornerDepth = notchType==='techno' ? 10 : (keta/2-notch.offset)*C;
+  // タツは桁角の鉛直線と天端の交点まで。カネは桁角を通る勾配直角線と
+  // 天端の交点まで測る。垂木成の分はカネの天端位置にだけ反映する。
+  const tatsu = Math.abs(horiz*slopeLength);
+  const kane = Math.abs(horiz*slopeLength+(cornerDepth/slopeLength-T)*C);
+  if (!Number.isFinite(tatsu) || !Number.isFinite(kane)) {
     get('kobai-error').textContent = '数値が大きすぎるため計算できません。';
     get('kobai-error').hidden = false;
     get('kobai').setAttribute('aria-invalid', 'true');
     return;
   }
-  get('kane').textContent = base.toFixed(1);
-  get('tatsu').textContent = perpendicular.toFixed(1);
+  // 既存の要素IDと表示名は逆なので、表示カードに合わせて出力する。
+  get('kane').textContent = tatsu.toFixed(1);
+  get('tatsu').textContent = kane.toFixed(1);
 }
 // 入力と欠きの種類を専用キーへ保存し、他の計算画面とは分ける。
 function saveInputs() {

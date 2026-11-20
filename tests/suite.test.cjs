@@ -131,13 +131,30 @@ function kebiki(t, saved = null, blocked = false) {
   return { w: dom.window, get, change(id, value) { get(id).value = value; get(id).dispatchEvent(new dom.window.Event("input", { bubbles: true })); } };
 }
 
+// 補正式を写さず、2本の直線の交点を作って天端上の距離を測る。
+function lineIntersection(a,b,c,d){
+  const r=[b[0]-a[0],b[1]-a[1]],s=[d[0]-c[0],d[1]-c[1]];
+  const cross=(u,v)=>u[0]*v[1]-u[1]*v[0];
+  const t=cross([c[0]-a[0],c[1]-a[1]],s)/cross(r,s);
+  return [a[0]+t*r[0],a[1]+t*r[1]];
+}
+function roofTopMeasurements({keta,kobai,noki,taruki,notchType}){
+  const slope=kobai/10,top=x=>-x*slope,bottom=x=>top(x)+taruki*Math.hypot(1,slope);
+  const corner=[-keta/2,notchType==='techno'?bottom(-keta/2)-10:bottom(notchType==='standard'?-22.5:0)];
+  const roofA=[0,0],roofB=[1000,top(1000)],end=[-noki,top(-noki)];
+  const vertical=lineIntersection(roofA,roofB,corner,[corner[0],corner[1]+1]);
+  const normal=lineIntersection(roofA,roofB,corner,[corner[0]+slope,corner[1]+1]);
+  const distance=point=>Math.hypot(point[0]-end[0],point[1]-end[1]);
+  return {tatsu:distance(vertical),kane:distance(normal),normal};
+}
+
 test("標準欠きのタツ・カネを表示し、保存復元しても数値が一致する", (t) => {
   const a = kebiki(t);
   for (const [keta, kobai, noki, taruki, tatsu, kane] of [
-    ["105", "1", "455", "60", "404.5", "398.5"],
-    ["90", "4", "600", "90", "597.8", "561.8"],
-    ["105", "9", "1000", "100", "1274.7", "1184.7"],
-    ["105", "2.5", "637", "60", "602.5", "587.5"],
+    ["105", "1", "455", "60", "404.5", "398.8"],
+    ["90", "4", "600", "90", "597.8", "565.1"],
+    ["105", "9", "1000", "100", "1274.7", "1202.8"],
+    ["105", "2.5", "637", "60", "602.5", "589.3"],
   ]) {
     for (const [id, value] of Object.entries({ keta, kobai, noki, taruki })) a.change(id, value);
     assert.equal(a.get("kane").parentElement.querySelector(".title").textContent, "タツ");
@@ -169,15 +186,16 @@ test('欠きは標準を既定とし、3択の条件・保存・再読込が同�
   assert.equal(a.get('notchType').value,'standard');
   assert.deepEqual([...a.get('notchType').options].filter(option=>option.value).map(option=>option.textContent),['標準','芯欠き','テクノ']);
   for(const [notchType,label,hint,tatsu,kane]of [
-    ['standard','標準',/22.5 mm/,'597.8','561.8'],
-    ['centerNotch','芯欠き',/0 mm/,'604.4','568.4'],
-    ['techno','テクノ',/鉛直に10 mm/,'601.5','565.5']
+    ['standard','標準',/22.5 mm/,'597.8','565.1'],
+    ['centerNotch','芯欠き',/0 mm/,'597.8','568.4'],
+    ['techno','テクノ',/鉛直に10 mm/,'597.8','565.5']
   ]){
     a.change('notchType',notchType);
     assert.equal(a.get('kane').textContent,tatsu);assert.equal(a.get('tatsu').textContent,kane);
     assert.equal(a.get('notch-hint').hidden,false);assert.match(a.get('notch-hint').textContent,hint);
     assert.match(a.get('notchType').getAttribute('aria-describedby'),/notch-hint/);
-    assert.equal(a.get('result-condition').textContent,label+'｜桁角のけびき線から垂木先端まで');
+    assert.equal(a.get('result-condition').textContent,label+'｜垂木天端の先端から桁角の基準線まで');
+    assert.match(a.get('notch-hint').textContent,/タツは鉛直線.*カネは勾配に直角.*天端/);
     for(const [id,value]of Object.entries(values))assert.equal(a.get(id).value,value);
     const saved=a.w.localStorage.getItem('kebiki-line.input.v1');assert.equal(JSON.parse(saved).notchType,notchType);
     const b=kebiki(t,saved);assert.equal(b.get('notchType').value,notchType);
@@ -199,55 +217,49 @@ test('以前の通常と種類なしの保存は標準で開き、保存元や�
   }
 });
 
-test('標準は桁角の鉛直線と垂木下端の交点から、垂木先端まで測る',t=>{
+test('3種類のタツは桁角の鉛直線と垂木天端の交点から、天端の先端まで測る',t=>{
   const a=kebiki(t),keraba=new JSDOM(read('apps/keraba/index.html'),{
     url:'https://example.test/keraba/',runScripts:'dangerously',pretendToBeVisual:true,
   });t.after(()=>keraba.window.close());
-  for(const roofMode of ['normal','tile'])for(const [keta,kobai,noki,taruki]of [
+  for(const notchType of ['standard','centerNotch','techno'])for(const roofMode of ['normal','tile'])for(const [keta,kobai,noki,taruki]of [
     [105,2.5,637,60],[90,4,600,90],[120,1.33,450,90],[105,4,0,60],
     [300,0.05,2000,300],[105,4,52.4999,60],[105,4,52.5,60],[105,4,52.5001,60]
   ]){
     for(const [id,value]of Object.entries({keta,kobai,noki,taruki}))a.change(id,String(value));
-    const g=keraba.window.geometry({...keraba.window.getParams(),moyaSize:keta,pitch:kobai,hTaruki:taruki,notchType:'standard',roofMode});
+    a.change('notchType',notchType);
+    const g=keraba.window.geometry({...keraba.window.getParams(),moyaSize:keta,pitch:kobai,hTaruki:taruki,notchType,roofMode});
     const endX=g.moya.xc-noki,startX=g.moya.xL;
-    const distance=Math.hypot(startX-endX,g.lnB(startX)-g.lnB(endX));
+    const distance=Math.hypot(startX-endX,g.lnD(startX)-g.lnD(endX));
     assert.equal(a.get('kane').textContent,distance.toFixed(1));
-    assert.equal(a.get('tatsu').textContent,(distance-taruki*kobai/10).toFixed(1));
   }
 });
 
-test('芯欠き・テクノは既存の桁上角からの投影計算を維持する',t=>{
+test('3種類のカネは桁角からの勾配直角線と垂木天端の交点まで測る',t=>{
   const a=kebiki(t),keraba=new JSDOM(read('apps/keraba/index.html'),{
     url:'https://example.test/keraba/',runScripts:'dangerously',pretendToBeVisual:true,
   });
   t.after(()=>keraba.window.close());
-  const examples=[[105,4,600,60],[90,1.33,450,90],[110.5,3.75,600.5,75.5],[120,0,600,75],
+  const examples=[[105,2.5,637,60],[105,4,600,60],[90,1.33,450,90],[110.5,3.75,600.5,75.5],
     [105,5,0,60],[105,9,2000,100],[300,0.5,0,300],
     [105,4,52.4999,60],[105,4,52.5,60],[105,4,52.5001,60],
     [10,0.05,0,1],[300,5,2000,300],
-    // 各欠きで投影距離の向きが反転する位置の直前・直後。
+    // 桁角より先端が内側にある場合も、2点の距離で確認する。
     [105,4,48.3619,60],[105,4,48.3622,60],
     [105,4,45.2585,60],[105,4,45.2588,60],
     [105,4,49.0516,60],[105,4,49.0519,60]];
-  for(const [notchType,label]of [['centerNotch','芯欠き'],['techno','テクノ']])
+  for(const [notchType,label]of [['standard','標準'],['centerNotch','芯欠き'],['techno','テクノ']])
   for(const roofMode of ['normal','tile'])for(const [keta,kobai,noki,taruki]of examples){
     for(const [id,value]of Object.entries({keta,kobai,noki,taruki}))a.change(id,String(value));
     a.change('notchType',notchType);
     const g=keraba.window.geometry(Object.assign(keraba.window.eval('getParams()'),{
       moyaSize:keta,pitch:kobai,hTaruki:taruki,notchType,roofMode,
     }));
-    // ケラバは水平屋根でも最小勾配を使うため、0寸だけは水平な幾何を直接確認する。
-    let distance;
-    if(kobai===0)distance=Math.abs(noki-keta/2);
-    else{
-      const xEnd=g.moya.xc-noki, yEnd=g.lnB(xEnd);
-      distance=Math.abs((g.moya.xL-xEnd)*g.cos-(g.moya.yT-yEnd)*g.sin);
-      if(notchType==='techno')assert.ok(Math.abs(g.lnB(g.moya.xL)-g.moya.yT-10)<1e-8);
-      else assert.ok(Math.abs(g.moya.xc-g.moya.xNotch-(notchType==='standard'?22.5:0))<1e-8);
-    }
-    assert.equal(a.get('kane').textContent,distance.toFixed(1));
-    assert.equal(a.get('tatsu').textContent,(distance-taruki*kobai/10).toFixed(1));
-    assert.equal(a.get('result-condition').textContent,label+'｜桁角のけびき線から垂木先端まで');
+    const end=[g.moya.xc-noki,g.lnD(g.moya.xc-noki)],corner=[g.moya.xL,g.moya.yT];
+    const normal=lineIntersection([0,g.lnD(0)],[1000,g.lnD(1000)],corner,[corner[0]+g.tan,corner[1]+1]);
+    const distance=Math.hypot(normal[0]-end[0],normal[1]-end[1]);
+    assert.ok(Math.abs(normal[1]-g.lnD(normal[0]))<1e-8);
+    assert.equal(a.get('tatsu').textContent,distance.toFixed(1));
+    assert.equal(a.get('result-condition').textContent,label+'｜垂木天端の先端から桁角の基準線まで');
   }
 });
 
@@ -255,7 +267,7 @@ test('テクノも4項目がそろうまで結果を出さず、範囲外・大�
   const a=kebiki(t,null,true);a.change('notchType','techno');
   for(const [id,value]of Object.entries({keta:'105',kobai:'4',noki:'600'}))a.change(id,value);
   assert.equal(a.get('kane').textContent,'—');a.change('taruki','60');
-  assert.equal(a.get('kane').textContent,'593.4');assert.equal(a.get('tatsu').textContent,'569.4');
+  assert.equal(a.get('kane').textContent,'589.7');assert.equal(a.get('tatsu').textContent,'569.4');
   a.change('noki','2000.1');assert.equal(a.get('kane').textContent,'—');assert.equal(a.get('noki-error').hidden,false);
   a.change('noki','600');a.change('kobai','1e308');
   assert.equal(a.get('kane').textContent,'—');assert.equal(a.get('tatsu').textContent,'—');
@@ -357,10 +369,21 @@ test('全項目がそろうまで結果を表示せず、保存領域が使え�
   a.get('btnReset').click();a.get('resetConfirm').click();assert.equal(a.get('keta').value,'');assert.equal(a.get('kane').textContent,'—');
 });
 
-test('指定範囲の端でカネが負になる場合も、符号と小数1桁の表示を維持する',t=>{
+test('水平・小さい桁・基準線が先端の外側にある場合も、天端上の2点間の距離になる',t=>{
   const a=kebiki(t);
-  for(const [id,value]of Object.entries({keta:'1',taruki:'300',kobai:'5',noki:'0'}))a.change(id,value);
-  assert.equal(a.get('kane').textContent,'0.6');assert.equal(a.get('tatsu').textContent,'-149.4');
+  for(const notchType of ['standard','centerNotch','techno']){
+    const examples=[[1,5,0,300],[300,0,2000,300],[105,0,0,60],[1,0.001,0,1],[105,2.5,637,60]];
+    const root=roofTopMeasurements({keta:105,kobai:4,noki:600,taruki:60,notchType});
+    for(const delta of [-.1,0,.1])examples.push([105,4,-root.normal[0]+delta,60]);
+    for(const [keta,kobai,noki,taruki]of examples){
+      for(const [id,value]of Object.entries({keta,kobai,noki,taruki}))a.change(id,String(value));
+      a.change('notchType',notchType);
+      const expected=roofTopMeasurements({keta,kobai,noki,taruki,notchType});
+      assert.equal(a.get('kane').textContent,expected.tatsu.toFixed(1));
+      assert.equal(a.get('tatsu').textContent,expected.kane.toFixed(1));
+      assert.ok(Number(a.get('kane').textContent)>=0);assert.ok(Number(a.get('tatsu').textContent)>=0);
+    }
+  }
 });
 
 test("ケラバの通常・瓦の図と保存を引き継ぎ、子画面は更新処理を重複させない", (t) => {
