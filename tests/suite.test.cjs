@@ -148,6 +148,83 @@ function roofTopMeasurements({keta,kobai,noki,taruki,notchType}){
   return {tatsu:distance(vertical),kane:distance(normal),normal};
 }
 
+test('小図の始点・終点・桁角と基準線は、表示寸法と同じ天端の交点を示す',t=>{
+  const a=kebiki(t),values={keta:105,kobai:2.5,noki:637,taruki:60};
+  const point=el=>[Number(el.getAttribute('cx')),Number(el.getAttribute('cy'))];
+  const line=el=>[[Number(el.getAttribute('x1')),Number(el.getAttribute('y1'))],[Number(el.getAttribute('x2')),Number(el.getAttribute('y2'))]];
+  for(const [id,value]of Object.entries(values))a.change(id,String(value));
+  for(const notchType of ['standard','centerNotch','techno']){
+    a.change('notchType',notchType);
+    const expected=roofTopMeasurements({...values,notchType});
+    for(const [kind,field]of [['tatsu','kane'],['kane','tatsu']]){
+      const figure=a.get('diagram-'+kind),svg=figure.querySelector('svg');
+      const start=point(svg.querySelector('[data-point="tip"]')),end=point(svg.querySelector('[data-point="end"]'));
+      const corner=point(svg.querySelector('[data-point="corner"]'));
+      assert.equal(svg.dataset.measurement,kind);
+      assert.equal(Number(svg.dataset.length).toFixed(1),a.get(field).textContent);
+      const mmPerPixel=Number(svg.dataset.modelUnit)/Number(svg.dataset.drawingScale);
+      assert.ok(Math.abs(Math.hypot(end[0]-start[0],end[1]-start[1])*mmPerPixel-expected[kind])<.02);
+      const [p,q]=line(svg.querySelector('[data-guide]')),d=[q[0]-p[0],q[1]-p[1]],len=Math.hypot(...d);
+      for(const v of [corner,end])assert.ok(Math.abs((v[0]-p[0])*d[1]-(v[1]-p[1])*d[0])/len<.003);
+      if(kind==='tatsu'){
+        assert.ok(Math.abs(d[0])<.002);assert.match(figure.textContent,/桁角から鉛直/);
+      }else{
+        const [r,s]=line(svg.querySelector('[data-rafter-top]')),u=[s[0]-r[0],s[1]-r[1]];
+        assert.ok(Math.abs(d[0]*u[0]+d[1]*u[1])/(len*Math.hypot(...u))<.0001);
+        assert.ok(svg.querySelector('[data-right-angle]'));assert.match(figure.textContent,/桁角から勾配に直角/);
+      }
+      assert.match(figure.textContent,/始点：垂木先端の天端/);
+      for(const p of [start,end,corner])assert.ok(p[0]>=0&&p[0]<=420&&p[1]>=0&&p[1]<=260);
+    }
+  }
+});
+
+test('入力と欠きの変更が小図へ追従し、再起動でも同じ図を復元して未入力・リセットでは消す',t=>{
+  const a=kebiki(t),drawing=app=>['tatsu','kane'].map(kind=>app.get('diagram-'+kind).innerHTML);
+  for(const [id,value]of Object.entries({keta:'105',kobai:'2.5',noki:'637',taruki:'60'}))a.change(id,value);
+  const before=drawing(a);a.change('noki','638');assert.notDeepEqual(drawing(a),before);
+  const normal=drawing(a);a.change('notchType','techno');assert.notDeepEqual(drawing(a),normal);
+  const saved=a.w.localStorage.getItem('kebiki-line.input.v1'),b=kebiki(t,saved);
+  assert.deepEqual(drawing(b),drawing(a));
+  assert.deepEqual(Object.keys(JSON.parse(saved)).sort(),['keta','kobai','noki','taruki','notchType'].sort());
+  for(const [field,value]of [['taruki',''],['taruki','60'],['noki','2001'],['noki','637'],['kobai','1e308']]){
+    a.change(field,value);
+    const complete=a.get('kane').textContent!=='—';
+    for(const kind of ['tatsu','kane'])assert.equal(!!a.get('diagram-'+kind).querySelector('svg'),complete);
+  }
+  b.get('btnReset').click();b.get('resetCancel').click();assert.deepEqual(drawing(b),drawing(kebiki(t,saved)));
+  b.get('btnReset').click();b.get('resetConfirm').click();
+  for(const kind of ['tatsu','kane']){
+    assert.equal(b.get('diagram-'+kind).querySelector('svg'),null);
+    assert.match(b.get('diagram-'+kind).textContent,/入力すると測定位置/);
+  }
+});
+
+test('水平・長い軒・先端外側・ゼロ長さ・大きな勾配でも小図に不正な座標を残さない',t=>{
+  const a=kebiki(t);
+  for(const notchType of ['standard','centerNotch','techno'])for(const [keta,kobai,noki,taruki]of [
+    [105,0,52.5,60],[105,2.5,0,60],[300,.05,2000,300],[1,5,0,300],[45,1e200,22.5,1]
+  ]){
+    for(const [id,value]of Object.entries({keta,kobai,noki,taruki}))a.change(id,String(value));
+    a.change('notchType',notchType);
+    assert.notEqual(a.get('kane').textContent,'—');
+    for(const kind of ['tatsu','kane']){
+      const svg=a.get('diagram-'+kind).querySelector('svg');assert.ok(svg);
+      assert.ok(!/NaN|Infinity/.test(svg.outerHTML));
+      for(const point of svg.querySelectorAll('[data-point]')){
+        const x=Number(point.getAttribute('cx')),y=Number(point.getAttribute('cy'));
+        assert.ok(Number.isFinite(x)&&x>=0&&x<=420);assert.ok(Number.isFinite(y)&&y>=0&&y<=260);
+      }
+      if(kobai===0){
+        assert.equal(Number(svg.dataset.length),0);assert.match(svg.textContent,/始点と終点が同じ/);
+      }
+      if(Number(svg.dataset.endS)<0){
+        assert.ok(svg.querySelector('[data-top-extension]'));assert.match(svg.textContent,/終点は先端の外側/);
+      }
+    }
+  }
+});
+
 test("標準欠きのタツ・カネを表示し、保存復元しても数値が一致する", (t) => {
   const a = kebiki(t);
   for (const [keta, kobai, noki, taruki, tatsu, kane] of [
