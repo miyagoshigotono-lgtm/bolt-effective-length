@@ -63,6 +63,7 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 .result .title { margin:0; color:var(--accent2); font-size:22px; font-weight:700; }
 .result .value { margin-top:18px; overflow-x:auto; overflow-y:hidden; white-space:nowrap; font-size:clamp(32px,5vw,64px); font-weight:700; font-variant-numeric:tabular-nums; line-height:1.3; }
 .result-unit { margin-top:6px; color:var(--sub); font-size:18px; text-align:right; }
+.end-shape { margin:6px 0 0; color:var(--sub); font-size:15px; }
 .result-kane { border-top-color:var(--kane); }
 .result-kane .title { color:var(--kane); }
 .length-diagram { margin:14px 0 0; }
@@ -115,10 +116,11 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
         <p id="kobai-error" class="field-error" role="alert" hidden></p>
         <div class="row">
           <label for="noki">軒の出<span class="sr-only">（mm）</span></label>
-          <input type="number" id="noki" min="0" max="2000" step="any" inputmode="decimal" aria-describedby="noki-error">
+          <input type="number" id="noki" min="0" max="2000" step="any" inputmode="decimal" aria-describedby="noki-error noki-hint">
           <span class="unit" aria-hidden="true">mm</span>
         </div>
         <p id="noki-error" class="field-error" role="alert" hidden></p>
+        <p id="noki-hint" class="hint">桁芯から垂木先端の天端までの水平距離。</p>
       </fieldset>
       <fieldset>
         <legend>部材寸法</legend>
@@ -169,12 +171,14 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
         <div class="results" aria-live="polite" aria-atomic="true">
           <div class="result">
             <h3 class="title">タツ</h3>
+            <p class="end-shape">先端：鉛直カット</p>
             <div class="value" id="kane">—</div>
             <div class="result-unit">mm</div>
             <figure class="length-diagram" id="diagram-tatsu"><p class="diagram-empty">入力すると測定位置を表示します</p></figure>
           </div>
           <div class="result result-kane">
             <h3 class="title">カネ</h3>
+            <p class="end-shape">先端：勾配に直角のカット</p>
             <div class="value" id="tatsu">—</div>
             <div class="result-unit">mm</div>
             <figure class="length-diagram" id="diagram-kane"><p class="diagram-empty">入力すると測定位置を表示します</p></figure>
@@ -216,24 +220,27 @@ for (let v = 1; v <= 5; v += 0.5) {
 function kebikiGeometry(values,notchType){
   const slope=values.kobai/10,slopeLength=Math.hypot(1,slope);
   const cornerDepth=notchType==='techno'?10:(values.keta/2-notchTypes[notchType].offset)*slope;
-  const signedTatsu=(values.noki-values.keta/2)*slopeLength;
-  const signedKane=signedTatsu+(cornerDepth/slopeLength-values.taruki)*slope;
-  return {tatsu:Math.abs(signedTatsu),kane:Math.abs(signedKane),signedTatsu,signedKane,
-    cornerN:values.taruki-cornerDepth/slopeLength,cos:1/slopeLength,sin:slope/slopeLength,
+  const cornerN=values.taruki-cornerDepth/slopeLength;
+  // けびき線は両方とも桁角を通る勾配直角線。先端天端を共通の原点にする。
+  const signedLength=(values.noki-values.keta/2)*slopeLength-cornerN*slope;
+  return {length:Math.abs(signedLength),signedLength,cutBack:values.taruki*slope,
+    cornerN,cos:1/slopeLength,sin:slope/slopeLength,
     keta:values.keta,taruki:values.taruki};
 }
 
 function renderKebikiDiagram(g,kind){
   const isTatsu=kind==='tatsu',label=isTatsu?'タツ':'カネ',color=isTatsu?'#1b6fd4':'#b65e12';
-  const endS=isTatsu?g.signedTatsu:g.signedKane,length=g[kind];
+  const endS=g.signedLength,length=g.length;
   // 大きな入力でも、先に正規化して座標差や外接枠の桁あふれを防ぐ。
-  const unit=Math.max(1,Math.abs(g.signedTatsu),Math.abs(g.signedKane),Math.abs(g.cornerN),g.keta,g.taruki);
-  const kt=g.keta/unit,ht=g.taruki/unit,corner=[g.signedKane/unit,g.cornerN/unit];
+  const unit=Math.max(1,Math.abs(endS),Math.abs(g.cornerN),g.keta,g.taruki,isTatsu?g.cutBack:0);
+  const kt=g.keta/unit,ht=g.taruki/unit,corner=[endS/unit,g.cornerN/unit];
   const beam=[corner,[corner[0]+kt*g.cos,corner[1]+kt*g.sin],
     [corner[0]+kt*(g.cos-g.sin),corner[1]+kt*(g.sin+g.cos)],
     [corner[0]-kt*g.sin,corner[1]+kt*g.cos]];
-  const farS=Math.max(0,g.signedTatsu/unit,g.signedKane/unit,...beam.map(p=>p[0]))+Math.max(kt,ht,.02);
-  const rafter=[[0,0],[farS,0],[farS,ht],[0,ht]],tip=[0,0],end=[endS/unit,0];
+  const farS=Math.max(0,endS/unit,...beam.map(p=>p[0]))+Math.max(kt,ht,.02);
+  // タツは上下の先端が同じ水平位置、カネは勾配直角方向に並ぶ。
+  const tip=[0,0],bottomTip=[isTatsu?-g.cutBack/unit:0,ht],end=[endS/unit,0];
+  const rafter=[tip,[farS,0],[farS,ht],bottomTip];
   const world=p=>[p[0]*g.cos+p[1]*g.sin,-p[0]*g.sin+p[1]*g.cos];
   const points=[...beam,...rafter,tip,end,corner].map(world);
   const minX=Math.min(...points.map(p=>p[0])),maxX=Math.max(...points.map(p=>p[0]));
@@ -253,20 +260,21 @@ function renderKebikiDiagram(g,kind){
   const polygon=(poly,attrs)=>`<polygon points="${poly.map(p=>xy(screen(p))).join(' ')}" ${attrs}/>`;
   svg.push(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="${kind}-diagram-title ${kind}-diagram-desc" data-measurement="${kind}" data-length="${length}" data-end-s="${endS}" data-model-unit="${unit}" data-drawing-scale="${scale}" font-family="'Yu Gothic UI','Meiryo',sans-serif" font-size="22" stroke-linecap="round" stroke-linejoin="round">`,
     `<title id="${kind}-diagram-title">${label} ${length.toFixed(1)} mmの測定位置</title>`,
-    `<desc id="${kind}-diagram-desc">始点は垂木先端の天端。終点は桁角から${isTatsu?'鉛直':'勾配に直角'}に引いた線と、垂木天端の交点です。</desc>`,
+    `<desc id="${kind}-diagram-desc">${label}は先端を${isTatsu?'鉛直':'勾配に直角'}に切る形状。始点は垂木先端の天端。終点は桁角から勾配に直角に引くけびき線と、垂木天端の交点です。</desc>`,
     `<defs><marker id="${kind}-dimension-arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" markerUnits="userSpaceOnUse" orient="auto-start-reverse"><path d="M 0 0 L 8 4 L 0 8" fill="none" stroke="${color}" stroke-width="1.7"/></marker></defs>`);
   svg.push(polygon(rafter,'fill="#eaf1f8" stroke="#64758a" stroke-width="1.5"'),
     polygon(beam,'fill="#f1e5ce" stroke="#8a7553" stroke-width="1.5"'),
+    line(A,screen(bottomTip),`stroke="${color}" stroke-width="3" data-end-cut="${isTatsu?'vertical':'normal'}"`),
     line(A,topEnd,'stroke="#3b4c61" stroke-width="2" data-rafter-top=""'));
   // 終点が先端より外なら、天端の延長線も描いて実材との位置関係を示す。
   if(endS<0)svg.push(line(B,A,'stroke="#64758a" stroke-width="1.7" stroke-dasharray="5 4" data-top-extension=""'));
-  // 基準線は桁角の先へも延ばし、小図でも鉛直と勾配直角を見分けられるようにする。
-  const guideDirection=isTatsu?[0,1]:[g.sin,g.cos];
+  // 切り方によらず、けびき線は桁角から勾配に直角に引く。
+  const guideDirection=[g.sin,g.cos];
   const dot=p=>p[0]*guideDirection[0]+p[1]*guideDirection[1];
   const guideFirst=dot(K)<dot(B)?K:B,guideLast=dot(K)<dot(B)?B:K;
   const guideStart=guideFirst.map((v,i)=>v-guideDirection[i]*8),guideEnd=guideLast.map((v,i)=>v+guideDirection[i]*28);
-  svg.push(line(guideStart,guideEnd,`stroke="${color}" stroke-width="2.5" stroke-dasharray="6 4" data-guide="${isTatsu?'vertical':'normal'}"`));
-  if(!isTatsu){
+  svg.push(line(guideStart,guideEnd,`stroke="${color}" stroke-width="2.5" stroke-dasharray="6 4" data-guide="normal"`));
+  {
     const r=8,u=[g.cos,-g.sin],v=[g.sin,g.cos];
     const square=[[B[0]+r*u[0],B[1]+r*u[1]],[B[0]+r*(u[0]+v[0]),B[1]+r*(u[1]+v[1])],[B[0]+r*v[0],B[1]+r*v[1]]];
     svg.push(`<polyline points="${square.map(xy).join(' ')}" fill="none" stroke="${color}" stroke-width="1.3" data-right-angle=""/>`);
@@ -293,7 +301,7 @@ function renderKebikiDiagram(g,kind){
     `<circle cx="${n(B[0])}" cy="${n(B[1])}" r="3.5" fill="${color}" data-point="end"/>`);
   if(length<1e-8)svg.push(text(width/2,height-12,'始点と終点が同じ', 'fill="#5b6878" text-anchor="middle" font-size="18"'));
   else if(endS<0)svg.push(text(width/2,height-12,'終点は先端の外側', 'fill="#5b6878" text-anchor="middle" font-size="18"'));
-  svg.push('</svg>',`<figcaption>○ 始点：垂木先端の天端<br>● 終点：桁角から${isTatsu?'鉛直':'勾配に直角'}の線と、天端の交点</figcaption>`);
+  svg.push('</svg>',`<figcaption>実線：${label}の先端形状<br>破線：けびき線（桁角から勾配に直角）<br>○ 始点：垂木先端の天端<br>● 終点：けびき線と天端の交点</figcaption>`);
   return svg.join('');
 }
 
@@ -323,12 +331,12 @@ function calc() {
   get('notchType').setAttribute('aria-invalid', String(!validType));
   get('notchType').setAttribute('aria-describedby',validType?'notchType-error notch-hint':'notchType-error');
   get('notch-hint').hidden = !validType;
-  get('notch-hint').textContent = validType?notch.hint+'タツは鉛直線、カネは勾配に直角の線を使い、垂木天端で測ります。':'';
+  get('notch-hint').textContent = validType?notch.hint+'タツ・カネは垂木先端の形状です。けびき線はどちらも桁角から勾配に直角に引きます。':'';
   get('result-condition').textContent = (validType ? notch.label+'｜' : '')+'垂木天端の先端から桁角の基準線まで';
   get('kane').textContent = get('tatsu').textContent = '—';
   if (!complete || !validType){updateKebikiDiagrams(null);return;}
   const g=kebikiGeometry(values,notchType);
-  if (!Number.isFinite(g.tatsu) || !Number.isFinite(g.kane)) {
+  if (!Number.isFinite(g.length) || !Number.isFinite(g.cutBack)) {
     updateKebikiDiagrams(null);
     get('kobai-error').textContent = '数値が大きすぎるため計算できません。';
     get('kobai-error').hidden = false;
@@ -336,8 +344,8 @@ function calc() {
     return;
   }
   // 既存の要素IDと表示名は逆なので、表示カードに合わせて出力する。
-  get('kane').textContent = g.tatsu.toFixed(1);
-  get('tatsu').textContent = g.kane.toFixed(1);
+  get('kane').textContent = g.length.toFixed(1);
+  get('tatsu').textContent = g.length.toFixed(1);
   updateKebikiDiagrams(g);
 }
 // 入力と欠きの種類を専用キーへ保存し、他の計算画面とは分ける。
