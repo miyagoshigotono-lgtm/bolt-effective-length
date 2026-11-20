@@ -229,9 +229,8 @@ function calc() {
   if (!complete || !validType) return;
   const keta = values.keta, C = values.kobai / 10, D = values.noki, T = values.taruki;
   const horiz = D - keta / 2;
-  // ケラバ図と同じ欠き条件で桁上角を求め、垂木方向へ投影する。
-  // 標準・芯欠きの値は水平距離、テクノの10 mmは鉛直距離として扱う。
-  const cornerDepth = notchType==='techno' ? 10 : (keta/2-notch.offset)*C;
+  // 標準は桁角の鉛直位置を基準にし、欠き深さを垂木方向へ加算しない。
+  const cornerDepth = notchType==='standard' ? 0 : notchType==='techno' ? 10 : (keta/2-notch.offset)*C;
   const slopeLength = Math.hypot(1,C);
   // 軒先が桁角より内側の場合も、向きを保って補正してから距離にする。
   const base = Math.abs(horiz*slopeLength+cornerDepth*(C/slopeLength));
