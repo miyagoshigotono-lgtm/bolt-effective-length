@@ -134,9 +134,10 @@ function kebiki(t, saved = null, blocked = false) {
 test("標準欠きのタツ・カネを表示し、保存復元しても数値が一致する", (t) => {
   const a = kebiki(t);
   for (const [keta, kobai, noki, taruki, tatsu, kane] of [
-    ["105", "1", "455", "60", "404.8", "398.8"],
-    ["90", "4", "600", "90", "601.1", "565.1"],
-    ["105", "9", "1000", "100", "1292.8", "1202.8"],
+    ["105", "1", "455", "60", "404.5", "398.5"],
+    ["90", "4", "600", "90", "597.8", "561.8"],
+    ["105", "9", "1000", "100", "1274.7", "1184.7"],
+    ["105", "2.5", "637", "60", "602.5", "587.5"],
   ]) {
     for (const [id, value] of Object.entries({ keta, kobai, noki, taruki })) a.change(id, value);
     assert.equal(a.get("kane").parentElement.querySelector(".title").textContent, "タツ");
@@ -144,8 +145,8 @@ test("標準欠きのタツ・カネを表示し、保存復元しても数値�
     assert.equal(a.get("tatsu").textContent, kane);
   }
   const b = kebiki(t, a.w.localStorage.getItem("kebiki-line.input.v1"));
-  assert.equal(b.get("noki").value, "1000");
-  assert.equal(b.get("kane").textContent, "1292.8");
+  assert.equal(b.get("noki").value, "637");
+  assert.equal(b.get("kane").textContent, "602.5");
   assert.equal(b.w.localStorage.getItem("bolt-proof"), "keep");
   assert.equal(b.w.localStorage.getItem("keraba-proof"), "keep");
 });
@@ -168,7 +169,7 @@ test('欠きは標準を既定とし、3択の条件・保存・再読込が同�
   assert.equal(a.get('notchType').value,'standard');
   assert.deepEqual([...a.get('notchType').options].filter(option=>option.value).map(option=>option.textContent),['標準','芯欠き','テクノ']);
   for(const [notchType,label,hint,tatsu,kane]of [
-    ['standard','標準',/22.5 mm/,'601.1','565.1'],
+    ['standard','標準',/22.5 mm/,'597.8','561.8'],
     ['centerNotch','芯欠き',/0 mm/,'604.4','568.4'],
     ['techno','テクノ',/鉛直に10 mm/,'601.5','565.5']
   ]){
@@ -189,7 +190,7 @@ test('以前の通常と種類なしの保存は標準で開き、保存元や�
     const values={keta:'90',kobai:'4',noki:'600',taruki:'90'};
     if(notchType!==undefined)values.notchType=notchType;
     const original=JSON.stringify(values),a=kebiki(t,original);
-    assert.equal(a.get('notchType').value,'standard');assert.equal(a.get('kane').textContent,'601.1');
+    assert.equal(a.get('notchType').value,'standard');assert.equal(a.get('kane').textContent,'597.8');
     assert.equal(a.w.localStorage.getItem('kebiki-line.input.v1'),original);
     a.change('noki','');
     assert.equal(a.get('kane').textContent,'—');assert.equal(JSON.parse(a.w.localStorage.getItem('kebiki-line.input.v1')).notchType,'standard');
@@ -198,7 +199,24 @@ test('以前の通常と種類なしの保存は標準で開き、保存元や�
   }
 });
 
-test('3種類のけびき距離はケラバの桁上角から垂木先端までの投影と一致する',t=>{
+test('標準は桁角の鉛直線と垂木下端の交点から、垂木先端まで測る',t=>{
+  const a=kebiki(t),keraba=new JSDOM(read('apps/keraba/index.html'),{
+    url:'https://example.test/keraba/',runScripts:'dangerously',pretendToBeVisual:true,
+  });t.after(()=>keraba.window.close());
+  for(const roofMode of ['normal','tile'])for(const [keta,kobai,noki,taruki]of [
+    [105,2.5,637,60],[90,4,600,90],[120,1.33,450,90],[105,4,0,60],
+    [300,0.05,2000,300],[105,4,52.4999,60],[105,4,52.5,60],[105,4,52.5001,60]
+  ]){
+    for(const [id,value]of Object.entries({keta,kobai,noki,taruki}))a.change(id,String(value));
+    const g=keraba.window.geometry({...keraba.window.getParams(),moyaSize:keta,pitch:kobai,hTaruki:taruki,notchType:'standard',roofMode});
+    const endX=g.moya.xc-noki,startX=g.moya.xL;
+    const distance=Math.hypot(startX-endX,g.lnB(startX)-g.lnB(endX));
+    assert.equal(a.get('kane').textContent,distance.toFixed(1));
+    assert.equal(a.get('tatsu').textContent,(distance-taruki*kobai/10).toFixed(1));
+  }
+});
+
+test('芯欠き・テクノは既存の桁上角からの投影計算を維持する',t=>{
   const a=kebiki(t),keraba=new JSDOM(read('apps/keraba/index.html'),{
     url:'https://example.test/keraba/',runScripts:'dangerously',pretendToBeVisual:true,
   });
@@ -211,7 +229,7 @@ test('3種類のけびき距離はケラバの桁上角から垂木先端まで�
     [105,4,48.3619,60],[105,4,48.3622,60],
     [105,4,45.2585,60],[105,4,45.2588,60],
     [105,4,49.0516,60],[105,4,49.0519,60]];
-  for(const [notchType,label]of [['standard','標準'],['centerNotch','芯欠き'],['techno','テクノ']])
+  for(const [notchType,label]of [['centerNotch','芯欠き'],['techno','テクノ']])
   for(const roofMode of ['normal','tile'])for(const [keta,kobai,noki,taruki]of examples){
     for(const [id,value]of Object.entries({keta,kobai,noki,taruki}))a.change(id,String(value));
     a.change('notchType',notchType);
@@ -335,14 +353,14 @@ test('リセットをキャンセルすれば入力を維持し、確定後は�
 test('全項目がそろうまで結果を表示せず、保存領域が使えなくても計算とリセットは動く',t=>{
   const a=kebiki(t,null,true);
   for(const [id,value]of Object.entries({keta:'105',taruki:'60',kobai:'1'}))a.change(id,value);
-  assert.equal(a.get('kane').textContent,'—');a.change('noki','455');assert.equal(a.get('kane').textContent,'404.8');
+  assert.equal(a.get('kane').textContent,'—');a.change('noki','455');assert.equal(a.get('kane').textContent,'404.5');
   a.get('btnReset').click();a.get('resetConfirm').click();assert.equal(a.get('keta').value,'');assert.equal(a.get('kane').textContent,'—');
 });
 
 test('指定範囲の端でカネが負になる場合も、符号と小数1桁の表示を維持する',t=>{
   const a=kebiki(t);
   for(const [id,value]of Object.entries({keta:'1',taruki:'300',kobai:'5',noki:'0'}))a.change(id,value);
-  assert.equal(a.get('kane').textContent,'5.5');assert.equal(a.get('tatsu').textContent,'-144.5');
+  assert.equal(a.get('kane').textContent,'0.6');assert.equal(a.get('tatsu').textContent,'-149.4');
 });
 
 test("ケラバの通常・瓦の図と保存を引き継ぎ、子画面は更新処理を重複させない", (t) => {
