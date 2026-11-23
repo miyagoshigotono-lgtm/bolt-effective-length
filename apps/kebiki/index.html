@@ -120,7 +120,7 @@ button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
           <span class="unit" aria-hidden="true">mm</span>
         </div>
         <p id="noki-error" class="field-error" role="alert" hidden></p>
-        <p id="noki-hint" class="hint">桁芯から垂木先端の天端までの水平距離。</p>
+        <p id="noki-hint" class="hint">桁芯から軒先までの水平距離。勾配方向の長さではありません。</p>
       </fieldset>
       <fieldset>
         <legend>部材寸法</legend>
@@ -215,31 +215,35 @@ for (let v = 1; v <= 5; v += 0.5) {
   get('kobai-choice').appendChild(o);
 }
 
-// 天端の先端を原点にし、勾配方向s・勾配直角方向nで測定点を共有する。
+// タツ先端を原点にし、勾配方向s・勾配直角方向nで線と端部を配置する。
 // 計算結果と小図はこの座標から作り、図だけの別計算を持たない。
 function kebikiGeometry(values,notchType){
   const slope=values.kobai/10,slopeLength=Math.hypot(1,slope);
   const cornerDepth=notchType==='techno'?10:(values.keta/2-notchTypes[notchType].offset)*slope;
   const cornerN=values.taruki-cornerDepth/slopeLength;
-  // けびき線は両方とも桁角を通る勾配直角線。先端天端を共通の原点にする。
-  const signedLength=(values.noki-values.keta/2)*slopeLength-cornerN*slope;
-  return {length:Math.abs(signedLength),signedLength,cutBack:values.taruki*slope,
+  // 標準は原版の電卓を基準とする。ほかの欠きは標準からの桁角の移動量だけを投影する。
+  const standardDepth=(values.keta/2-notchTypes.standard.offset)*slope;
+  const guideS=(values.noki-values.keta/2)*slopeLength+(cornerDepth-standardDepth)*(slope/slopeLength);
+  const cutBack=values.taruki*slope;
+  const signedTatsu=guideS,signedKane=guideS-cutBack;
+  return {tatsu:Math.abs(signedTatsu),kane:Math.abs(signedKane),signedTatsu,signedKane,guideS,cutBack,
     cornerN,cos:1/slopeLength,sin:slope/slopeLength,
     keta:values.keta,taruki:values.taruki};
 }
 
 function renderKebikiDiagram(g,kind){
   const isTatsu=kind==='tatsu',label=isTatsu?'タツ':'カネ',color=isTatsu?'#1b6fd4':'#b65e12';
-  const endS=g.signedLength,length=g.length;
+  const endS=isTatsu?g.signedTatsu:g.signedKane,length=g[kind];
   // 大きな入力でも、先に正規化して座標差や外接枠の桁あふれを防ぐ。
-  const unit=Math.max(1,Math.abs(endS),Math.abs(g.cornerN),g.keta,g.taruki,isTatsu?g.cutBack:0);
-  const kt=g.keta/unit,ht=g.taruki/unit,corner=[endS/unit,g.cornerN/unit];
+  const unit=Math.max(1,Math.abs(g.guideS),Math.abs(endS),Math.abs(g.cornerN),g.keta,g.taruki,g.cutBack);
+  const kt=g.keta/unit,ht=g.taruki/unit,corner=[g.guideS/unit,g.cornerN/unit];
   const beam=[corner,[corner[0]+kt*g.cos,corner[1]+kt*g.sin],
     [corner[0]+kt*(g.cos-g.sin),corner[1]+kt*(g.sin+g.cos)],
     [corner[0]-kt*g.sin,corner[1]+kt*g.cos]];
-  const farS=Math.max(0,endS/unit,...beam.map(p=>p[0]))+Math.max(kt,ht,.02);
-  // タツは上下の先端が同じ水平位置、カネは勾配直角方向に並ぶ。
-  const tip=[0,0],bottomTip=[isTatsu?-g.cutBack/unit:0,ht],end=[endS/unit,0];
+  const tipS=isTatsu?0:g.cutBack/unit;
+  const farS=Math.max(tipS,g.guideS/unit,...beam.map(p=>p[0]))+Math.max(kt,ht,.02);
+  // 先端形状の補正を始点へ反映する。けびき線の位置は両図で共有する。
+  const tip=[tipS,0],bottomTip=[isTatsu?-g.cutBack/unit:tipS,ht],end=[g.guideS/unit,0];
   const rafter=[tip,[farS,0],[farS,ht],bottomTip];
   const world=p=>[p[0]*g.cos+p[1]*g.sin,-p[0]*g.sin+p[1]*g.cos];
   const points=[...beam,...rafter,tip,end,corner].map(world);
@@ -301,7 +305,7 @@ function renderKebikiDiagram(g,kind){
     `<circle cx="${n(B[0])}" cy="${n(B[1])}" r="3.5" fill="${color}" data-point="end"/>`);
   if(length<1e-8)svg.push(text(width/2,height-12,'始点と終点が同じ', 'fill="#5b6878" text-anchor="middle" font-size="18"'));
   else if(endS<0)svg.push(text(width/2,height-12,'終点は先端の外側', 'fill="#5b6878" text-anchor="middle" font-size="18"'));
-  svg.push('</svg>',`<figcaption>実線：${label}の先端形状<br>破線：けびき線（桁角から勾配に直角）<br>○ 始点：垂木先端の天端<br>● 終点：けびき線と天端の交点</figcaption>`);
+  svg.push('</svg>',`<figcaption>端部・測定位置の模式図<br>実線：${label}の先端形状<br>破線：けびき線（桁角から勾配に直角）<br>○ 始点：垂木先端の天端<br>● 終点：けびき線と天端の交点</figcaption>`);
   return svg.join('');
 }
 
@@ -336,7 +340,7 @@ function calc() {
   get('kane').textContent = get('tatsu').textContent = '—';
   if (!complete || !validType){updateKebikiDiagrams(null);return;}
   const g=kebikiGeometry(values,notchType);
-  if (!Number.isFinite(g.length) || !Number.isFinite(g.cutBack)) {
+  if (!Number.isFinite(g.tatsu) || !Number.isFinite(g.kane) || !Number.isFinite(g.cutBack)) {
     updateKebikiDiagrams(null);
     get('kobai-error').textContent = '数値が大きすぎるため計算できません。';
     get('kobai-error').hidden = false;
@@ -344,8 +348,8 @@ function calc() {
     return;
   }
   // 既存の要素IDと表示名は逆なので、表示カードに合わせて出力する。
-  get('kane').textContent = g.length.toFixed(1);
-  get('tatsu').textContent = g.length.toFixed(1);
+  get('kane').textContent = g.tatsu.toFixed(1);
+  get('tatsu').textContent = g.kane.toFixed(1);
   updateKebikiDiagrams(g);
 }
 // 入力と欠きの種類を専用キーへ保存し、他の計算画面とは分ける。
